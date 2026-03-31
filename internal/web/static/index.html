@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Radio Streamer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .station { margin: 10px 0; }
+        button { margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Go Radio Streamer</h1>
+    <div id="stations"></div>
+    <button onclick="stopAll()">Stop All</button>
+
+    <script>
+        async function loadStations() {
+            const response = await fetch('/api/stations');
+            const stations = await response.json();
+            const container = document.getElementById('stations');
+            container.innerHTML = stations.map((station, index) =>
+                `<div class="station">
+                    ${index + 1}. ${station.Name} - ${station.URL}
+                    <button onclick="playStation(${index + 1})">Play</button>
+                </div>`
+            ).join('');
+        }
+
+        async function playStation(num) {
+            const response = await fetch('/api/play', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ station: num })
+            });
+            alert(response.ok ? 'Playing station' : 'Error playing station');
+        }
+
+        async function stopAll() {
+            const response = await fetch('/api/stop', { method: 'POST' });
+            alert(response.ok ? 'Stopped' : 'Error stopping');
+        }
+
+        loadStations();
+    </script>
+</body>
+</html>

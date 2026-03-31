@@ -1,0 +1,6 @@
+1. SRF-1 http://stream.srg-ssr.ch/drs1/mp3_128.m3u
+2. SRF-2 http://stream.srg-ssr.ch/drs2/mp3_128.m3u
+3. SRF-3 http://stream.srg-ssr.ch/drs3/mp3_128.m3u
+4. SRF-4-News http://stream.srg-ssr.ch/drs4news/mp3_128.m3u
+5. SRF-Musikwelle http://stream.srg-ssr.ch/drsmw/mp3_128.m3u
+6. SRF-Virus http://stream.srg-ssr.ch/drsvirus/mp3_128.m3u
