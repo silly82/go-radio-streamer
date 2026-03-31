@@ -5,44 +5,274 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Go Radio Streamer</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .station { margin: 10px 0; }
-        button { margin-left: 10px; }
+        * { box-sizing: border-box; }
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #f5f5f5;
+            max-width: 600px;
+            margin: 20px auto;
+        }
+        h1 { color: #333; }
+        .current-station {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .current-station.stopped {
+            background: #f0f0f0;
+            border-left-color: #999;
+            color: #999;
+        }
+        .current-meta {
+            margin-top: 8px;
+            font-weight: normal;
+            color: #333;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .current-meta span {
+            background: rgba(255,255,255,0.7);
+            padding: 4px 8px;
+            border-radius: 999px;
+        }
+        .current-station.stopped .current-meta {
+            color: #777;
+        }
+        .stations-container {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .station { 
+            margin: 12px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.3s;
+        }
+        .station:hover {
+            background: #f9f9f9;
+        }
+        .station.active {
+            background: #c8e6c9;
+            border-color: #4caf50;
+            font-weight: bold;
+        }
+        .station-info {
+            flex: 1;
+        }
+        .station-number {
+            font-weight: bold;
+            color: #2196F3;
+            min-width: 30px;
+        }
+        .station-name {
+            font-weight: bold;
+            color: #333;
+        }
+        .station-url {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 4px;
+        }
+        .buttons {
+            display: flex;
+            gap: 5px;
+        }
+        button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s;
+        }
+        .btn-play {
+            background: #4caf50;
+            color: white;
+        }
+        .btn-play:hover {
+            background: #45a049;
+        }
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+        .btn-stop:hover {
+            background: #da190b;
+        }
+        .btn-stop-all {
+            background: #ff9800;
+            color: white;
+            padding: 10px 20px;
+            margin: 20px 0;
+        }
+        .btn-stop-all:hover {
+            background: #e68900;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background: #ccc;
+        }
+        .status-indicator.active {
+            background: #4caf50;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body>
-    <h1>Go Radio Streamer</h1>
-    <div id="stations"></div>
-    <button onclick="stopAll()">Stop All</button>
+    <h1>🎙️ Go Radio Streamer</h1>
+    
+    <div class="current-station" id="current-station">
+        <span class="status-indicator"></span>
+        <span id="current-text">Keine Station aktiv</span>
+        <div class="current-meta" id="current-meta" hidden>
+            <span id="current-artist">Artist: -</span>
+            <span id="current-track">Titel: -</span>
+        </div>
+    </div>
+
+    <div class="stations-container">
+        <h2>Verfügbare Stationen</h2>
+        <div id="stations"></div>
+        <button class="btn-stop-all" onclick="stopAll()">⏹️ Alle stoppen</button>
+    </div>
 
     <script>
+        let currentStation = null;
+        let currentStatus = null;
+        let stations = [];
+
+        async function refreshStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (!response.ok) {
+                    return;
+                }
+
+                const status = await response.json();
+                currentStatus = status;
+                currentStation = stations.findIndex(station => station.Name === status.station);
+                currentStation = currentStation >= 0 && status.running ? currentStation + 1 : null;
+                updateCurrentStation(currentStatus);
+                updateUI();
+            } catch (error) {
+                console.error('Status refresh failed', error);
+            }
+        }
+
         async function loadStations() {
             const response = await fetch('/api/stations');
-            const stations = await response.json();
+            stations = await response.json();
             const container = document.getElementById('stations');
             container.innerHTML = stations.map((station, index) =>
-                `<div class="station">
-                    ${index + 1}. ${station.Name} - ${station.URL}
-                    <button onclick="playStation(${index + 1})">Play</button>
+                `<div class="station" id="station-${index + 1}">
+                    <div class="station-info">
+                        <div>
+                            <span class="station-number">${index + 1}.</span>
+                            <span class="station-name">${station.Name}</span>
+                        </div>
+                        <div class="station-url">${station.URL}</div>
+                    </div>
+                    <div class="buttons">
+                        <button class="btn-play" onclick="playStation(${index + 1})">▶️ Play</button>
+                    </div>
                 </div>`
             ).join('');
+            updateCurrentStation();
         }
 
         async function playStation(num) {
+            // Stop current station if different
+            if (currentStation !== null && currentStation !== num) {
+                await fetch('/api/stop', { method: 'POST' });
+            }
+
+            // Play new station
             const response = await fetch('/api/play', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ station: num })
             });
-            alert(response.ok ? 'Playing station' : 'Error playing station');
+
+            if (response.ok) {
+                currentStation = num;
+                await refreshStatus();
+            } else {
+                alert('❌ Fehler beim Abspielen der Station');
+            }
         }
 
         async function stopAll() {
             const response = await fetch('/api/stop', { method: 'POST' });
-            alert(response.ok ? 'Stopped' : 'Error stopping');
+            if (response.ok) {
+                currentStation = null;
+                await refreshStatus();
+            } else {
+                alert('❌ Fehler beim Stoppen');
+            }
         }
 
-        loadStations();
+        function updateUI() {
+            // Update station highlighting
+            document.querySelectorAll('.station').forEach((el, index) => {
+                if (currentStation === index + 1) {
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active');
+                }
+            });
+            updateCurrentStation(currentStatus);
+        }
+
+        function updateCurrentStation(status = null) {
+            const statusEl = document.getElementById('current-station');
+            const textEl = document.getElementById('current-text');
+            const indicator = statusEl.querySelector('.status-indicator');
+            const metaEl = document.getElementById('current-meta');
+            const artistEl = document.getElementById('current-artist');
+            const trackEl = document.getElementById('current-track');
+
+            if (currentStation && currentStation > 0 && currentStation <= stations.length) {
+                const station = stations[currentStation - 1];
+                textEl.textContent = `▶️ Aktiv: ${station.Name}`;
+                statusEl.classList.remove('stopped');
+                indicator.classList.add('active');
+                artistEl.textContent = `Artist: ${status?.artist || '-'}`;
+                trackEl.textContent = `Titel: ${status?.track || '-'}`;
+                metaEl.hidden = false;
+            } else {
+                textEl.textContent = '⏹️ Keine Station aktiv';
+                statusEl.classList.add('stopped');
+                indicator.classList.remove('active');
+                artistEl.textContent = 'Artist: -';
+                trackEl.textContent = 'Titel: -';
+                metaEl.hidden = true;
+            }
+        }
+
+        // Auto-update every 5 seconds
+        setInterval(refreshStatus, 5000);
+
+        // Load stations on page load
+        loadStations().then(refreshStatus);
     </script>
 </body>
 </html>

@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/gorilla/mux"
 	"go-radio-streamer/internal/config"
 	"go-radio-streamer/internal/streamer"
+
+	"github.com/gorilla/mux"
 )
 
 type Router struct {
@@ -27,6 +28,7 @@ func NewRouter(s *streamer.Streamer, stations []config.Station) *Router {
 
 func (r *Router) setupRoutes() {
 	r.HandleFunc("/api/stations", r.handleStations).Methods("GET")
+	r.HandleFunc("/api/status", r.handleStatus).Methods("GET")
 	r.HandleFunc("/api/play", r.handlePlay).Methods("POST")
 	r.HandleFunc("/api/stop", r.handleStop).Methods("POST")
 }
@@ -34,6 +36,11 @@ func (r *Router) setupRoutes() {
 func (r *Router) handleStations(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(r.stations)
+}
+
+func (r *Router) handleStatus(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(r.streamer.CurrentStatus())
 }
 
 func (r *Router) handlePlay(w http.ResponseWriter, req *http.Request) {

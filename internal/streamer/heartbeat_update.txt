@@ -1,0 +1,27 @@
+// publishHeartbeat publishes heartbeat with status, station and metadata
+func (s *Streamer) publishHeartbeat() {
+if s.mqttClient == nil || !s.mqttClient.IsConnected() {
+return
+}
+
+// Build heartbeat payload with metadata
+var status string
+if s.running && s.currentStation != "" {
+// Include metadata if available
+if s.metadata.Artist != "" || s.metadata.Track != "" {
+status = fmt.Sprintf("{\"status\":\"streaming\",\"station\":\"%s\",\"artist\":\"%s\",\"track\":\"%s\",\"timestamp\":%d}",
+s.currentStation, s.metadata.Artist, s.metadata.Track, time.Now().Unix())
+} else {
+status = fmt.Sprintf("{\"status\":\"streaming\",\"station\":\"%s\",\"timestamp\":%d}",
+s.currentStation, time.Now().Unix())
+}
+} else {
+status = fmt.Sprintf("{\"status\":\"stopped\",\"timestamp\":%d}", time.Now().Unix())
+}
+
+// Publish to heartbeat topic
+token := s.mqttClient.Publish("gostreamer/heartbeat", 0, false, status)
+token.Wait()
+
+log.Printf("Heartbeat published: %s", status)
+}

@@ -2,6 +2,7 @@ package streamer
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,9 +13,11 @@ import (
 	"strings"
 	"time"
 
+	"go-radio-streamer/internal/config"
+
+	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"github.com/hajimehoshi/go-mp3"
 	"github.com/pion/rtp"
-	"go-radio-streamer/internal/config"
 	"golang.org/x/net/ipv4"
 )
 
@@ -23,20 +26,40 @@ const (
 	retryDelay = 5 * time.Second
 )
 
+// Metadata holds song information from ICY tags
+type Metadata struct {
+	Artist  string    `json:"artist"`
+	Track   string    `json:"track"`
+	Updated time.Time `json:"updated"`
+}
+
+type Status struct {
+	Running     bool   `json:"running"`
+	Station     string `json:"station"`
+	Artist      string `json:"artist"`
+	Track       string `json:"track"`
+	MetaUpdated int64  `json:"meta_updated"`
+}
+
 // Streamer manages the audio stream.
 type Streamer struct {
-	station    config.Station
-	stopCh     chan struct{}
-	running    bool
+	station        config.Station
+	stopCh         chan struct{}
+	running        bool
 	currentStation string
-	publishFunc func(topic string, message string)
-	conn       *net.UDPConn // Keep connection open during streaming
+	publishFunc    func(topic string, message string)
+	conn           *net.UDPConn // Keep connection open during streaming
+	streamDone     chan struct{}
+	heartbeatTick  *time.Ticker
+	heartbeatStop  chan struct{}
+	metadata       Metadata
 }
 
 // NewStreamer creates a new Streamer.
 func NewStreamer(publishFunc func(topic string, message string)) (*Streamer, error) {
 	return &Streamer{
-		stopCh: make(chan struct{}),
+		stopCh:      make(chan struct{}),
+		streamDone:  make(chan struct{}),
 		publishFunc: publishFunc,
 	}, nil
 }
@@ -45,6 +68,117 @@ func NewStreamer(publishFunc func(topic string, message string)) (*Streamer, err
 func (s *Streamer) SetPublishFunc(publishFunc func(topic string, message string)) {
 	s.publishFunc = publishFunc
 }
+
+// SetupMQTTClient is kept for compatibility with the current startup flow.
+func (s *Streamer) SetupMQTTClient(broker, username, password string) error {
+	return nil
+}
+
+func (s *Streamer) CurrentStatus() Status {
+	return Status{
+		Running:     s.running,
+		Station:     s.currentStation,
+		Artist:      s.metadata.Artist,
+		Track:       s.metadata.Track,
+		MetaUpdated: s.metadata.Updated.Unix(),
+	}
+}
+
+// startHeartbeat starts publishing heartbeat messages every 30 seconds
+func (s *Streamer) startHeartbeat(streamURL string) {
+	if s.heartbeatTick != nil {
+		s.heartbeatTick.Stop()
+	}
+
+	s.heartbeatStop = make(chan struct{})
+	s.heartbeatTick = time.NewTicker(30 * time.Second)
+
+	go func() {
+		for {
+			select {
+			case <-s.heartbeatTick.C:
+				if streamURL != "" {
+					s.updateMetadataAsync(streamURL)
+				}
+				s.publishHeartbeat()
+			case <-s.heartbeatStop:
+				return
+			}
+		}
+	}()
+
+	log.Println("Heartbeat started (30 second interval)")
+}
+
+// stopHeartbeat stops the heartbeat
+func (s *Streamer) stopHeartbeat() {
+	if s.heartbeatTick != nil {
+		s.heartbeatTick.Stop()
+	}
+	if s.heartbeatStop != nil {
+		close(s.heartbeatStop)
+	}
+}
+
+// publishHeartbeat publishes heartbeat with status and current station
+func (s *Streamer) publishHeartbeat() {
+	if s.publishFunc == nil {
+		return
+	}
+
+	// Build heartbeat payload
+	var status string
+	if s.running && s.currentStation != "" {
+		status = fmt.Sprintf("{\"status\":\"streaming\",\"station\":\"%s\",\"timestamp\":%d,\"artist\":\"%s\",\"track\":\"%s\",\"meta_updated\":%d}",
+			s.currentStation, time.Now().Unix(), s.metadata.Artist, s.metadata.Track, s.metadata.Updated.Unix())
+	} else {
+		status = fmt.Sprintf("{\"status\":\"stopped\",\"timestamp\":%d}", time.Now().Unix())
+	}
+
+	// Publish to heartbeat topic
+	s.publishFunc("gostreamer/heartbeat", status)
+
+	log.Printf("Heartbeat published: %s", status)
+}
+
+// mqttMessageHandler handles incoming MQTT messages
+func (s *Streamer) mqttMessageHandler(client MQTT.Client, msg MQTT.Message) {
+	topic := msg.Topic()
+	payload := string(msg.Payload())
+
+	log.Printf("MQTT received: %s = %s", topic, payload)
+
+	switch topic {
+	case "gostreamer/play":
+		// Parse station number from payload
+		var stationNum int
+		_, err := fmt.Sscanf(payload, "%d", &stationNum)
+		if err != nil {
+			log.Printf("Invalid station number: %s", payload)
+			return
+		}
+		log.Printf("MQTT command: Play station %d", stationNum)
+		// Station info would need to be passed separately or stored
+	case "gostreamer/stop":
+		log.Printf("MQTT command: Stop streaming")
+		s.Stop()
+	default:
+		log.Printf("Unknown MQTT topic: %s", topic)
+	}
+}
+
+// PublishStatus publishes the current status to MQTT
+func (s *Streamer) PublishStatus(status string) {
+	if s.publishFunc != nil {
+		payload := fmt.Sprintf("{\"status\":\"%s\",\"station\":\"%s\",\"artist\":\"%s\",\"track\":\"%s\",\"meta_updated\":%d}",
+			status, s.currentStation, s.metadata.Artist, s.metadata.Track, s.metadata.Updated.Unix())
+
+		s.publishFunc("gostreamer/current", payload)
+		log.Printf("Published status: %s", status)
+	}
+}
+
+// SetPublishFunc sets the publish function for MQTT.
 
 // setupMulticastSocket sets up a UDP socket for multicast sending.
 func setupMulticastSocket(multicastAddr string) (*net.UDPConn, error) {
@@ -101,12 +235,12 @@ func decodeAndResampleWithFFmpeg(streamURL string) (io.ReadCloser, error) {
 	cmd := exec.Command(
 		"ffmpeg",
 		"-i", streamURL,
-		"-ar", "48000",      // resample to 48kHz
-		"-ac", "2",          // 2 channels (stereo)
-		"-f", "s16le",       // output format: signed 16-bit little-endian
-		"-hide_banner",      // suppress FFmpeg banner
+		"-ar", "48000", // resample to 48kHz
+		"-ac", "2", // 2 channels (stereo)
+		"-f", "s16le", // output format: signed 16-bit little-endian
+		"-hide_banner",       // suppress FFmpeg banner
 		"-loglevel", "error", // only log errors
-		"pipe:1",            // output to stdout
+		"pipe:1", // output to stdout
 	)
 
 	stdout, err := cmd.StdoutPipe()
@@ -142,6 +276,7 @@ func (fr *ffmpegReader) Close() error {
 func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
 	defer func() {
 		s.running = false
+		close(s.streamDone)
 	}()
 
 	// Use FFmpeg to decode and resample
@@ -161,11 +296,17 @@ func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
 	ticker := time.NewTicker(time.Millisecond)
 	defer ticker.Stop()
 
-	for s.running {
+	for {
 		select {
 		case <-s.stopCh:
 			return
 		case <-ticker.C:
+			select {
+			case <-s.stopCh:
+				return
+			default:
+			}
+
 			// Read PCM data from FFmpeg
 			n, err := audioReader.Read(buffer)
 			if err != nil {
@@ -195,7 +336,7 @@ func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
 			// Convert back to int16 bytes for RTP (big-endian L16)
 			rtpPayload := make([]byte, len(floatBuffer)*2)
 			for i, sample := range floatBuffer {
-				sampleInt16 := int16(sample * 32767.0) // denormalize
+				sampleInt16 := int16(sample * 32767.0)       // denormalize
 				rtpPayload[i*2] = byte(sampleInt16 >> 8)     // big-endian high byte
 				rtpPayload[i*2+1] = byte(sampleInt16 & 0xFF) // low byte
 			}
@@ -210,6 +351,9 @@ func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
 			// Send
 			_, err = conn.Write(rtpBuf)
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "closed network connection") {
+					return
+				}
 				log.Printf("Failed to send RTP packet: %v", err)
 			}
 
@@ -245,14 +389,18 @@ func (s *Streamer) Start(station config.Station, multicastAddress string) error 
 		return fmt.Errorf("failed to get stream URL: %w", err)
 	}
 
+	// Fetch ICY metadata for artist/track in background
+	s.updateMetadataAsync(streamURL)
+
 	// Start streaming in a goroutine
 	s.running = true
+	s.streamDone = make(chan struct{})
+	s.startHeartbeat(streamURL) // Start heartbeat when streaming begins
 	go s.streamAudio(conn, streamURL)
 
 	log.Printf("Streaming %s to %s", s.station.Name, multicastAddress)
-	if s.publishFunc != nil {
-		s.publishFunc("radio/current", s.currentStation)
-	}
+	s.PublishStatus(s.currentStation)
+	s.publishHeartbeat() // Publish initial heartbeat
 	return nil
 }
 
@@ -266,21 +414,27 @@ func (s *Streamer) Stop() {
 	s.running = false
 	log.Println("Running flag set to false:", s.running)
 	close(s.stopCh)
-	
-	// Wait a bit for goroutine to finish
-	time.Sleep(100 * time.Millisecond)
-	
+
+	// Stop heartbeat
+	s.stopHeartbeat()
+
+	select {
+	case <-s.streamDone:
+	case <-time.After(2 * time.Second):
+		log.Println("Timed out waiting for stream loop to stop")
+	}
+
 	// Close connection
 	if s.conn != nil {
 		s.conn.Close()
 		s.conn = nil
 	}
-	
+
 	s.currentStation = ""
+	s.metadata = Metadata{}
 	s.stopCh = make(chan struct{}) // Re-create for next start
-	if s.publishFunc != nil {
-		s.publishFunc("radio/current", "stopped")
-	}
+	s.PublishStatus("stopped")
+	s.publishHeartbeat() // Publish final heartbeat
 	log.Println("Stream stopped successfully")
 }
 

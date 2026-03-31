@@ -28,7 +28,13 @@ func main() {
 		log.Fatalf("failed to create streamer: %v", err)
 	}
 
-	// Setup MQTT
+	// Setup MQTT client in streamer
+	err = s.SetupMQTTClient(mqttConfig.Broker, mqttConfig.User, mqttConfig.Password)
+	if err != nil {
+		log.Printf("Warning: MQTT setup failed: %v", err)
+	}
+
+	// Setup MQTT handler (legacy, kept for API compatibility)
 	mqttHandler := mqtt.NewHandler(s, stations)
 	mqttHandler.SetupMQTT(mqttConfig.Broker, mqttConfig.User, mqttConfig.Password)
 

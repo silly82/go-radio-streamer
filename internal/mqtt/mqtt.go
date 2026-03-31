@@ -4,9 +4,10 @@ import (
 	"log"
 	"strconv"
 
-	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"go-radio-streamer/internal/config"
 	"go-radio-streamer/internal/streamer"
+
+	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
 type Handler struct {
@@ -36,11 +37,11 @@ func (h *Handler) SetupMQTT(broker string, username string, password string) {
 	}
 
 	// Subscribe to topics
-	if token := h.client.Subscribe("radio/play", 0, nil); token.Wait() && token.Error() != nil {
-		log.Printf("Failed to subscribe to radio/play: %v", token.Error())
+	if token := h.client.Subscribe("gostreamer/play", 0, nil); token.Wait() && token.Error() != nil {
+		log.Printf("Failed to subscribe to gostreamer/play: %v", token.Error())
 	}
-	if token := h.client.Subscribe("radio/stop", 0, nil); token.Wait() && token.Error() != nil {
-		log.Printf("Failed to subscribe to radio/stop: %v", token.Error())
+	if token := h.client.Subscribe("gostreamer/stop", 0, nil); token.Wait() && token.Error() != nil {
+		log.Printf("Failed to subscribe to gostreamer/stop: %v", token.Error())
 	}
 
 	log.Printf("MQTT connected to %s", broker)
@@ -60,7 +61,7 @@ func (h *Handler) messageHandler(client MQTT.Client, msg MQTT.Message) {
 	log.Printf("MQTT received: %s = %s", topic, payload)
 
 	switch topic {
-	case "radio/play":
+	case "gostreamer/play":
 		num, err := strconv.Atoi(payload)
 		if err != nil {
 			log.Printf("Invalid station number: %s", payload)
@@ -77,7 +78,7 @@ func (h *Handler) messageHandler(client MQTT.Client, msg MQTT.Message) {
 		} else {
 			log.Printf("Started streaming station %d: %s", num, station.Name)
 		}
-	case "radio/stop":
+	case "gostreamer/stop":
 		h.streamer.Stop()
 		log.Println("Stopped streaming")
 	default:
