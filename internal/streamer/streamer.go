@@ -10,10 +10,12 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
 	"go-radio-streamer/internal/config"
+	"go-radio-streamer/pkg/aes67"
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"github.com/hajimehoshi/go-mp3"
@@ -53,6 +55,7 @@ type Streamer struct {
 	heartbeatTick  *time.Ticker
 	heartbeatStop  chan struct{}
 	metadata       Metadata
+	sapAnnouncer   *aes67.SAPAnnouncer
 }
 
 // NewStreamer creates a new Streamer.
@@ -202,14 +205,14 @@ func setupMulticastSocket(multicastAddr string) (*net.UDPConn, error) {
 	return conn, nil
 }
 
-// createRTPPacket creates an RTP packet with L16 payload.
-func createRTPPacket(audioData []byte, seq uint16, timestamp uint32, ssrc uint32) ([]byte, error) {
+// createRTPPacket creates an RTP packet with the given payload type.
+func createRTPPacket(audioData []byte, payloadType uint8, seq uint16, timestamp uint32, ssrc uint32) ([]byte, error) {
 	header := &rtp.Header{
 		Version:        2,
 		Padding:        false,
 		Extension:      false,
 		Marker:         false,
-		PayloadType:    96, // L16
+		PayloadType:    payloadType,
 		SequenceNumber: seq,
 		Timestamp:      timestamp,
 		SSRC:           ssrc,
@@ -231,13 +234,14 @@ func createRTPPacket(audioData []byte, seq uint16, timestamp uint32, ssrc uint32
 // decodeAndResampleWithFFmpeg uses FFmpeg to decode MP3 and resample to 48kHz.
 func decodeAndResampleWithFFmpeg(streamURL string) (io.ReadCloser, error) {
 	// Use FFmpeg to decode MP3 and resample to 48kHz
-	// Output format: s16le (signed 16-bit little-endian PCM)
+	// Output format: s24be (signed 24-bit big-endian PCM)
 	cmd := exec.Command(
 		"ffmpeg",
 		"-i", streamURL,
 		"-ar", "48000", // resample to 48kHz
 		"-ac", "2", // 2 channels (stereo)
-		"-f", "s16le", // output format: signed 16-bit little-endian
+		"-acodec", "pcm_s24be",
+		"-f", "s24be", // output format: signed 24-bit big-endian
 		"-hide_banner",       // suppress FFmpeg banner
 		"-loglevel", "error", // only log errors
 		"pipe:1", // output to stdout
@@ -291,74 +295,72 @@ func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
 	timestamp := uint32(0)
 	ssrc := rand.Uint32()
 
-	buffer := make([]byte, 1024*2) // buffer for PCM data (bytes)
+	const (
+		rtpPayloadType = 97
+		channels       = 2
+		samplesPerMs   = 48
+		bytesPerL24    = 3
+		ptimeMs        = 8
+	)
 
-	ticker := time.NewTicker(time.Millisecond)
-	defer ticker.Stop()
+	samplesPerPacket := samplesPerMs * ptimeMs
+	packetDuration := time.Duration(ptimeMs) * time.Millisecond
+	totalSamples := samplesPerPacket * channels
+
+	rtpPayload := make([]byte, totalSamples*bytesPerL24)
+	nextSend := time.Now()
 
 	for {
 		select {
 		case <-s.stopCh:
 			return
-		case <-ticker.C:
+		default:
+		}
+
+		// Read exactly one packet worth of L24 PCM data.
+		n, err := io.ReadFull(audioReader, rtpPayload)
+		if err != nil {
+			if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+				return
+			}
+			if err != io.EOF {
+				log.Printf("Audio reader error: %v", err)
+			}
+			return
+		}
+		if n == 0 {
+			continue
+		}
+
+		rtpBuf, err := createRTPPacket(rtpPayload[:n], rtpPayloadType, seq, timestamp, ssrc)
+		if err != nil {
+			log.Printf("Failed to create RTP packet: %v", err)
+			continue
+		}
+
+		_, err = conn.Write(rtpBuf)
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "closed network connection") {
+				return
+			}
+			log.Printf("Failed to send RTP packet: %v", err)
+		}
+
+		seq++
+		timestamp += uint32(samplesPerPacket)
+
+		nextSend = nextSend.Add(packetDuration)
+		sleepFor := time.Until(nextSend)
+		if sleepFor > 0 {
+			timer := time.NewTimer(sleepFor)
 			select {
 			case <-s.stopCh:
+				timer.Stop()
 				return
-			default:
+			case <-timer.C:
 			}
-
-			// Read PCM data from FFmpeg
-			n, err := audioReader.Read(buffer)
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("Audio reader error: %v", err)
-				}
-				return
-			}
-			if n == 0 {
-				continue
-			}
-
-			// Convert bytes to int16 samples (little-endian)
-			numSamples := n / 2
-			int16Buffer := make([]int16, numSamples)
-			for i := 0; i < numSamples; i++ {
-				// Little-endian: low byte first, then high byte
-				int16Buffer[i] = int16(buffer[i*2]) | (int16(buffer[i*2+1]) << 8)
-			}
-
-			// Convert int16 to float64 for normalization
-			floatBuffer := make([]float64, numSamples)
-			for i, sample := range int16Buffer {
-				floatBuffer[i] = float64(sample) / 32768.0 // normalize to -1..1
-			}
-
-			// Convert back to int16 bytes for RTP (big-endian L16)
-			rtpPayload := make([]byte, len(floatBuffer)*2)
-			for i, sample := range floatBuffer {
-				sampleInt16 := int16(sample * 32767.0)       // denormalize
-				rtpPayload[i*2] = byte(sampleInt16 >> 8)     // big-endian high byte
-				rtpPayload[i*2+1] = byte(sampleInt16 & 0xFF) // low byte
-			}
-
-			// Create RTP packet
-			rtpBuf, err := createRTPPacket(rtpPayload, seq, timestamp, ssrc)
-			if err != nil {
-				log.Printf("Failed to create RTP packet: %v", err)
-				continue
-			}
-
-			// Send
-			_, err = conn.Write(rtpBuf)
-			if err != nil {
-				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "closed network connection") {
-					return
-				}
-				log.Printf("Failed to send RTP packet: %v", err)
-			}
-
-			seq++
-			timestamp += 48 // 1ms at 48kHz
+		} else if sleepFor < -5*time.Millisecond {
+			nextSend = time.Now()
 		}
 	}
 }
@@ -398,6 +400,22 @@ func (s *Streamer) Start(station config.Station, multicastAddress string) error 
 	s.startHeartbeat(streamURL) // Start heartbeat when streaming begins
 	go s.streamAudio(conn, streamURL)
 
+	multicastIP, portStr, splitErr := net.SplitHostPort(multicastAddress)
+	if splitErr == nil {
+		port, portErr := strconv.Atoi(portStr)
+		if portErr == nil {
+			sdp := aes67.BuildSDP("gostreamer", multicastIP, port, 97, aes67.DefaultPTPRefClock, aes67.DefaultPtimeMs)
+			announcer, announceErr := aes67.NewSAPAnnouncer(aes67.DefaultSAPAddress, 30*time.Second, sdp)
+			if announceErr != nil {
+				log.Printf("Failed to start SAP announcer: %v", announceErr)
+			} else {
+				s.sapAnnouncer = announcer
+				s.sapAnnouncer.Start()
+				log.Printf("SAP announcement started for %s", multicastAddress)
+			}
+		}
+	}
+
 	log.Printf("Streaming %s to %s", s.station.Name, multicastAddress)
 	s.PublishStatus(s.currentStation)
 	s.publishHeartbeat() // Publish initial heartbeat
@@ -417,6 +435,10 @@ func (s *Streamer) Stop() {
 
 	// Stop heartbeat
 	s.stopHeartbeat()
+	if s.sapAnnouncer != nil {
+		s.sapAnnouncer.Stop()
+		s.sapAnnouncer = nil
+	}
 
 	select {
 	case <-s.streamDone:

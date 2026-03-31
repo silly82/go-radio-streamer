@@ -25,8 +25,9 @@ func TestCreateRTPPacket(t *testing.T) {
 	seq := uint16(1234)
 	timestamp := uint32(567890)
 	ssrc := uint32(987654321)
+	payloadType := uint8(97)
 
-	buf, err := createRTPPacket(audioData, seq, timestamp, ssrc)
+	buf, err := createRTPPacket(audioData, payloadType, seq, timestamp, ssrc)
 	if err != nil {
 		t.Fatalf("createRTPPacket failed: %v", err)
 	}
@@ -63,14 +64,14 @@ func TestSetupMulticastSocket(t *testing.T) {
 
 func TestSetPublishFunc(t *testing.T) {
 	s, _ := NewStreamer(nil)
-	
+
 	var called bool
 	newPublishFunc := func(topic string, message string) {
 		called = true
 	}
 
 	s.SetPublishFunc(newPublishFunc)
-	
+
 	if s.publishFunc == nil {
 		t.Fatal("SetPublishFunc did not set the publish function")
 	}
@@ -98,9 +99,6 @@ func TestFloatToInt16Conversion(t *testing.T) {
 		if tt.input == 0.0 && result != 0 {
 			t.Errorf("%s: got %d, expected 0", tt.name, result)
 		}
-		// Just verify conversion doesn't panic and produces int16
-		if result < -32768 || result > 32767 {
-			t.Errorf("%s: result %d out of int16 range", tt.name, result)
-		}
+		// result is int16 by definition; conversion path exercised above
 	}
 }
