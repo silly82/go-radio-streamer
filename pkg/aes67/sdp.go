@@ -3,7 +3,7 @@ package aes67
 import "fmt"
 
 const DefaultPTPRefClock = "IEEE1588-2008:00-00-00-00-00-00-00-00:0"
-const DefaultPtimeMs = 8
+const DefaultPtimeMs = 40
 
 func BuildSDP(sessionName, multicastIP string, port, payloadType int, ptpRefClock string, ptimeMs int) string {
 	if sessionName == "" {

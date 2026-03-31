@@ -195,6 +195,10 @@ func setupMulticastSocket(multicastAddr string) (*net.UDPConn, error) {
 		return nil, fmt.Errorf("failed to dial UDP: %w", err)
 	}
 
+	if err := conn.SetWriteBuffer(1 << 20); err != nil {
+		log.Printf("Warning: failed to set UDP write buffer: %v", err)
+	}
+
 	// Set multicast TTL
 	p := ipv4.NewPacketConn(conn)
 	if err := p.SetMulticastTTL(32); err != nil {
@@ -237,6 +241,10 @@ func decodeAndResampleWithFFmpeg(streamURL string) (io.ReadCloser, error) {
 	// Output format: s24be (signed 24-bit big-endian PCM)
 	cmd := exec.Command(
 		"ffmpeg",
+		"-reconnect", "1",
+		"-reconnect_streamed", "1",
+		"-reconnect_delay_max", "5",
+		"-thread_queue_size", "4096",
 		"-i", streamURL,
 		"-ar", "48000", // resample to 48kHz
 		"-ac", "2", // 2 channels (stereo)
@@ -300,67 +308,131 @@ func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
 		channels       = 2
 		samplesPerMs   = 48
 		bytesPerL24    = 3
-		ptimeMs        = 8
+		ptimeMs        = 40
+		bufferPackets  = 256
+		prebufferPkts  = 25
 	)
 
 	samplesPerPacket := samplesPerMs * ptimeMs
 	packetDuration := time.Duration(ptimeMs) * time.Millisecond
 	totalSamples := samplesPerPacket * channels
 
-	rtpPayload := make([]byte, totalSamples*bytesPerL24)
-	nextSend := time.Now()
+	packetBytes := totalSamples * bytesPerL24
+	pktCh := make(chan []byte, bufferPackets)
+	readErrCh := make(chan error, 1)
+	silencePayload := make([]byte, packetBytes)
+
+	go func() {
+		defer close(pktCh)
+		readBuf := make([]byte, packetBytes)
+		for {
+			select {
+			case <-s.stopCh:
+				return
+			default:
+			}
+
+			n, err := io.ReadFull(audioReader, readBuf)
+			if err != nil {
+				if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+					return
+				}
+				select {
+				case readErrCh <- err:
+				default:
+				}
+				return
+			}
+			if n != packetBytes {
+				continue
+			}
+
+			pkt := make([]byte, packetBytes)
+			copy(pkt, readBuf)
+			select {
+			case pktCh <- pkt:
+			case <-s.stopCh:
+				return
+			}
+		}
+	}()
+
+	pending := make([][]byte, 0, prebufferPkts)
+	prebufferTimeout := time.NewTimer(3 * time.Second)
+	defer prebufferTimeout.Stop()
+
+prebufferLoop:
+	for len(pending) < prebufferPkts {
+		select {
+		case <-s.stopCh:
+			return
+		case err := <-readErrCh:
+			if err != nil {
+				log.Printf("Audio reader error: %v", err)
+			}
+			return
+		case pkt, ok := <-pktCh:
+			if !ok {
+				break prebufferLoop
+			}
+			pending = append(pending, pkt)
+		case <-prebufferTimeout.C:
+			break prebufferLoop
+		}
+	}
+
+	log.Printf("RTP prebuffer ready: %d packets (%d ms)", len(pending), len(pending)*ptimeMs)
+
+	ticker := time.NewTicker(packetDuration)
+	defer ticker.Stop()
+	underrunCount := 0
 
 	for {
 		select {
 		case <-s.stopCh:
 			return
-		default:
-		}
-
-		// Read exactly one packet worth of L24 PCM data.
-		n, err := io.ReadFull(audioReader, rtpPayload)
-		if err != nil {
-			if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
-				return
-			}
-			if err != io.EOF {
+		case err := <-readErrCh:
+			if err != nil {
 				log.Printf("Audio reader error: %v", err)
 			}
-			return
-		}
-		if n == 0 {
-			continue
-		}
-
-		rtpBuf, err := createRTPPacket(rtpPayload[:n], rtpPayloadType, seq, timestamp, ssrc)
-		if err != nil {
-			log.Printf("Failed to create RTP packet: %v", err)
-			continue
-		}
-
-		_, err = conn.Write(rtpBuf)
-		if err != nil {
-			if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "closed network connection") {
+			if len(pending) == 0 && pktCh == nil {
 				return
 			}
-			log.Printf("Failed to send RTP packet: %v", err)
-		}
-
-		seq++
-		timestamp += uint32(samplesPerPacket)
-
-		nextSend = nextSend.Add(packetDuration)
-		sleepFor := time.Until(nextSend)
-		if sleepFor > 0 {
-			timer := time.NewTimer(sleepFor)
-			select {
-			case <-s.stopCh:
-				timer.Stop()
-				return
-			case <-timer.C:
+		case pkt, ok := <-pktCh:
+			if ok {
+				pending = append(pending, pkt)
+			} else {
+				pktCh = nil
 			}
-		} else if sleepFor < -5*time.Millisecond {
-			nextSend = time.Now()
+		case <-ticker.C:
+			payload := silencePayload
+			if len(pending) > 0 {
+				payload = pending[0]
+				pending = pending[1:]
+				underrunCount = 0
+			} else {
+				underrunCount++
+				if underrunCount == 1 || underrunCount%25 == 0 {
+					log.Printf("RTP buffer underrun: sending silence (count=%d)", underrunCount)
+				}
+			}
+
+			rtpBuf, err := createRTPPacket(payload, rtpPayloadType, seq, timestamp, ssrc)
+			if err != nil {
+				log.Printf("Failed to create RTP packet: %v", err)
+				continue
+			}
+
+			_, err = conn.Write(rtpBuf)
+			if err != nil {
+				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "closed network connection") {
+					return
+				}
+				log.Printf("Failed to send RTP packet: %v", err)
+			}
+
+			seq++
+			timestamp += uint32(samplesPerPacket)
 		}
 	}
 }
