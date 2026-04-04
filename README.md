@@ -4,7 +4,54 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Raspberry%20Pi-2ea44f)](./RASPBERRY_PI_SETUP.md)
 
+## 🇬🇧 English
+
 Go service that takes an internet radio stream (MP3), decodes/resamples it via FFmpeg, and sends it as AES67-style RTP multicast (`L24/48000/2`) with Web UI, REST API, MQTT control, ICY metadata, and SAP/SDP announcement.
+
+### 🚀 Installation
+
+- Go (`1.26.x`)
+- FFmpeg in `PATH`
+- MQTT optional (without `mqtt.conf`, HTTP/Web still runs)
+
+```bash
+# Debian/Ubuntu / Raspberry Pi OS
+sudo apt-get update
+sudo apt-get install -y ffmpeg
+
+cd /home/silly/go-radio-streamer
+go build -o radio-streamer ./cmd
+./radio-streamer
+```
+
+Server URL: `http://localhost:8080`
+
+Raspberry Pi guide: `RASPBERRY_PI_SETUP.md`
+
+### 🔌 API Quickstart
+
+```bash
+curl -sS http://localhost:8080/api/stations
+curl -sS -X POST http://localhost:8080/api/play -H 'Content-Type: application/json' -d '{"station":1}'
+curl -sS -X POST http://localhost:8080/api/stop
+curl -sS http://localhost:8080/api/status
+curl -sS http://localhost:8080/api/stream.sdp
+```
+
+### 📡 MQTT Topics
+
+- Control: `gostreamer/play`, `gostreamer/stop`
+- Status: `gostreamer/current`, `gostreamer/heartbeat`
+
+### 📄 License
+
+MIT (`LICENSE`)
+
+---
+
+## 🇨🇭 Deutsch
+
+Go-Service, der einen Internet-Radiostream (MP3) per FFmpeg dekodiert/resampelt und als AES67-ähnlichen RTP-Multicast (`L24/48000/2`) mit Web-UI, REST-API, MQTT-Steuerung, ICY-Metadaten und SAP/SDP-Announcement sendet.
 
 ## 🚀 Installation
 
