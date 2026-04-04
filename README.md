@@ -2,7 +2,7 @@
 
 Go service that takes an internet radio stream (MP3), decodes/resamples it via FFmpeg, and sends it as AES67-style RTP multicast (`L24/48000/2`) with Web UI, REST API, MQTT control, ICY metadata, and SAP/SDP announcement.
 
-## 🚀 Installation (Top)
+## 🚀 Installation
 
 ### Voraussetzungen
 - Go (aktuell mit Go `1.26.x` gebaut)
@@ -218,6 +218,10 @@ cd /home/silly/go-radio-streamer
 go test ./...
 go build -o radio-streamer ./cmd
 ```
+
+## 📄 Lizenz
+
+Dieses Projekt steht unter der MIT-Lizenz. Details siehe `LICENSE`.
 
 ## 🗂️ Projektlayout
 
