@@ -12,10 +12,11 @@
 | File | Size | Purpose | Audience |
 |------|------|---------|----------|
 | `README.md` | 10.3 KB | User guide, setup, troubleshooting | Users, Developers |
+| `checklist.md` | 2.0 KB | Final checklist (current source) | PMs, QA, Devs |
 | `status.md` | 12.3 KB | Project status, phases, milestones | PMs, Tech Leads |
 | `FINAL_SUMMARY.md` | 8.3 KB | Executive summary, metrics | Executives, Stakeholders |
 | `INDEX.md` | 7.8 KB | Documentation index & navigation | All |
-| `CHECKLIST.md` | 9.9 KB | Implementation checklist, sign-off | PMs, QA |
+| `CHECKLIST.md` | 0.2 KB | Legacy redirect to `checklist.md` | All |
 | `QUICK_REFERENCE.sh` | 3.5 KB | Quick reference (executable) | All |
 
 ### Configuration Files
@@ -215,7 +216,7 @@ Config Package:      35.7%
 | View project status | status.md | Project Overview |
 | Check test results | FINAL_SUMMARY.md | Testing Results |
 | Find quick commands | QUICK_REFERENCE.sh | (run script) |
-| Verify implementation | CHECKLIST.md | Full Checklist |
+| Verify implementation | checklist.md | Final Checklist |
 | Navigate docs | INDEX.md | Documentation Index |
 
 ---
@@ -396,7 +397,8 @@ All objectives achieved. Application is ready for deployment and use.
 - status.md (project status)
 - FINAL_SUMMARY.md (executive summary)
 - INDEX.md (documentation index)
-- CHECKLIST.md (implementation verification)
+- checklist.md (implementation verification, current)
+- CHECKLIST.md (legacy redirect)
 - QUICK_REFERENCE.sh (command reference)
 
 **Known Limitations**:

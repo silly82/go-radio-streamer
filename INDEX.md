@@ -5,6 +5,7 @@
 ```
 go-radio-streamer/
 ├── README.md              ← START HERE (User Guide)
+├── checklist.md           ← Final Checklist (current)
 ├── status.md              ← Project Status & Phase Milestones
 ├── FINAL_SUMMARY.md       ← Executive Summary
 ├── QUICK_REFERENCE.sh     ← Quick Reference Card (bash script)
@@ -36,8 +37,12 @@ go-radio-streamer/
 ⏱️ **Time**: 5 minutes
 
 ### "I want to know what's implemented"
-👉 **Read**: `FINAL_SUMMARY.md` (Features Delivered)  
+👉 **Read**: `checklist.md` (Kurzfassung)  
 ⏱️ **Time**: 3 minutes
+
+### "I want the final checklist"
+👉 **Read**: `checklist.md`  
+⏱️ **Time**: 2 minutes
 
 ---
 
@@ -240,6 +245,9 @@ Source Code/
 Build Output/
 ├── radio-streamer        → Compiled Binary
 └── go.mod               → Dependencies
+
+Current Checklist Source:
+└── checklist.md         → Single source of checklist truth
 ```
 
 ---
