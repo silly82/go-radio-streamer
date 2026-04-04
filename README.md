@@ -6,6 +6,7 @@ Go service that takes an internet radio stream (MP3), decodes/resamples it via F
 
 - RTP multicast audio to `239.0.0.1:5004`
 - Audio format: `L24/48000/2` (payload type `97`)
+- Clean station switching with controlled stop/start on `POST /api/play`
 - Stability-first sender tuning (not low-latency):
   - default `ptime=40`
   - prebuffering before send
@@ -19,7 +20,7 @@ Go service that takes an internet radio stream (MP3), decodes/resamples it via F
 
 - Go (project currently built with Go 1.25.x)
 - FFmpeg in `PATH`
-- MQTT broker (optional, but expected by default startup flow)
+- MQTT broker optional (`mqtt.conf` may be missing; HTTP/Web still starts)
 
 Examples:
 
@@ -78,6 +79,7 @@ http://localhost:8080/
 
 Functions:
 - Start/stop streaming
+- Senderwechsel ohne separaten Stop (Backend übernimmt atomaren Switch)
 - Show active station
 - Show metadata (`artist`, `track`) via status polling
 
@@ -222,6 +224,11 @@ Install FFmpeg and verify:
 ffmpeg -version
 ```
 
+### MQTT unavailable / no `mqtt.conf`
+
+- Server starts anyway (HTTP/Web only mode)
+- MQTT control/status is disabled until valid `mqtt.conf` is present
+
 ## Development
 
 ```bash
@@ -258,4 +265,4 @@ go-radio-streamer/
 
 ---
 
-Last updated: 31. März 2026
+Last updated: 4. April 2026

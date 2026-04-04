@@ -1,6 +1,6 @@
 # 📦 Go-Radio-Streamer: Project Manifest
 
-**Date**: 31. März 2026  
+**Date**: 4. April 2026  
 **Version**: 1.0 (Release)  
 **Status**: 🟢 Production Ready
 
@@ -100,8 +100,8 @@ Transitive:            ~15 packages
 ### Streaming
 - ✅ AES67 RTP Protocol Implementation
 - ✅ Multicast UDP (239.0.0.1:5004)
-- ✅ 48kHz, 16-bit, Stereo, L16 format
-- ✅ Proper packet timing (1ms intervals)
+- ✅ 48kHz, 24-bit, Stereo, L24 format
+- ✅ Stability-first packet timing (`ptime=40ms`)
 
 ### Audio Processing
 - ✅ MP3 Decoding (via FFmpeg)
@@ -122,8 +122,8 @@ Transitive:            ~15 packages
 
 ### MQTT Integration
 - ✅ Broker Connection
-- ✅ Topic Subscription (radio/play, radio/stop)
-- ✅ Status Publishing (radio/current)
+- ✅ Topic Subscription (gostreamer/play, gostreamer/stop)
+- ✅ Status Publishing (gostreamer/current, gostreamer/heartbeat)
 - ✅ Message Parsing
 
 ### Configuration
@@ -272,7 +272,7 @@ Coverage:           9.3%-35.7%
 1. **Single Stream**: Only one station at a time
 2. **MP3 Only**: Other formats depend on FFmpeg codecs
 3. **No PTP**: Uses RTP timestamps only
-4. **No SDP**: Manual Multicast configuration required
+4. **No PTP**: Uses RTP timestamps only
 5. **No Authentication**: API endpoints unprotected
 6. **Linear Resampling**: FFmpeg default (adequate for tests)
 
@@ -365,7 +365,7 @@ Before using this project, verify:
 
 **Overall Completion**: 100% ✅
 **Production Ready**: YES 🟢
-**Last Updated**: 31. März 2026
+**Last Updated**: 4. April 2026
 **Version**: 1.0 (Release)
 
 All objectives achieved. Application is ready for deployment and use.
@@ -374,12 +374,12 @@ All objectives achieved. Application is ready for deployment and use.
 
 ## 📝 Release Notes
 
-### Version 1.0 (31. März 2026)
+### Version 1.0 (4. April 2026)
 
 **Features**:
 - Complete AES67 RTP streaming implementation
 - FFmpeg-based MP3 decoding with automatic resampling
-- REST API with 3 endpoints
+- REST API with 5 endpoints
 - Web UI for station selection
 - MQTT remote control and status publishing
 - Configuration file support
@@ -405,7 +405,7 @@ All objectives achieved. Application is ready for deployment and use.
 - Single stream only
 - MP3 format only
 - No PTP synchronization
-- No SDP announcement
+- SAP/SDP available; no PTP synchronization
 
 ---
 
@@ -423,4 +423,4 @@ All objectives achieved. Application is ready for deployment and use.
 
 Built with ❤️ in Go  
 Status: 🟢 Production Ready  
-Date: 31. März 2026
+Date: 4. April 2026

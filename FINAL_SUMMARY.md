@@ -1,6 +1,6 @@
 # Go-Radio-Streamer - Final Project Summary
 
-**Date**: 31. März 2026  
+**Date**: 4. April 2026  
 **Status**: 🟢 **PRODUCTION READY**  
 **Phase Completed**: Phase 3 - Integration Testing
 
@@ -36,11 +36,11 @@
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| **AES67 RTP Streaming** | ✅ | L16 codec, 48kHz, Stereo, Multicast UDP 239.0.0.1:5004 |
+| **AES67 RTP Streaming** | ✅ | L24 codec, 48kHz, Stereo, Multicast UDP 239.0.0.1:5004 |
 | **MP3 Decoding** | ✅ | FFmpeg-based, auto-resampling to 48kHz |
 | **Web Interface** | ✅ | Simple HTML UI at http://localhost:8080 |
-| **REST API** | ✅ | 3 endpoints: /api/stations, /api/play, /api/stop |
-| **MQTT Control** | ✅ | Subscribe (radio/play, radio/stop), Publish (radio/current) |
+| **REST API** | ✅ | 5 endpoints: /api/stations, /api/status, /api/stream.sdp, /api/play, /api/stop |
+| **MQTT Control** | ✅ | Subscribe (gostreamer/play, gostreamer/stop), Publish (gostreamer/current, gostreamer/heartbeat) |
 | **Configuration** | ✅ | stations.txt, mqtt.conf external files |
 | **Unit Tests** | ✅ | 5 tests, all PASS (Streamer 9.3%, Config 35.7% coverage) |
 | **Error Handling** | ✅ | Graceful shutdown, connection management |
@@ -66,8 +66,8 @@ Startup Time:           ~500ms (FFmpeg initialization)
 Memory Usage:           50-100MB (FFmpeg + Go runtime)
 CPU Usage:              10-20% per stream
 Streaming Latency:      1-2 seconds (FFmpeg buffering)
-Packet Rate:            48 packets/second (1ms intervals)
-Bit Rate:               ~1.536 Mbps (48kHz stereo L16)
+Packet Rate:            25 packets/second (40ms intervals)
+Bit Rate:               ~2.304 Mbps (48kHz stereo L24)
 ```
 
 ### Network
@@ -76,7 +76,7 @@ Protocol:               UDP Multicast
 Address:                239.0.0.1:5004
 TTL:                    32
 Packet Size:            ~1500 bytes (Ethernet MTU)
-Format:                 RTP/L16
+Format:                 RTP/L24
 Sample Rate:            48000 Hz (AES67 standard)
 Channels:               2 (Stereo)
 ```
@@ -102,8 +102,8 @@ HTTP Server (Port 8080)
 │   └── Multicast UDP Transmission
 │
 └── MQTT Handler (Remote Control)
-    ├── Subscribe: radio/play, radio/stop
-    └── Publish: radio/current
+    ├── Subscribe: gostreamer/play, gostreamer/stop
+    └── Publish: gostreamer/current, gostreamer/heartbeat
 ```
 
 ### Key Dependencies
@@ -145,7 +145,7 @@ PASS	5/5 tests in 0.005s
 ```bash
 # Test 1: Server startup
 ./radio-streamer &
-# Result: ✅ Server starts, MQTT connects, HTTP listens
+# Result: ✅ Server starts, HTTP listens (MQTT optional)
 
 # Test 2: API - Get stations
 curl http://localhost:8080/api/stations
@@ -206,13 +206,13 @@ tcpdump -i lo 'udp port 5004'
 - ❌ Single stream only (one station at a time)
 - ❌ MP3 format only (other formats require FFmpeg codecs)
 - ❌ No PTP synchronization (uses RTP timestamps)
-- ❌ No SDP announcement (manual multicast config)
+- ❌ No PTP synchronization (professional clocking still optional)
 - ❌ No authentication on API endpoints
 
 ### Recommended Enhancements (Priority Order)
 1. **High**: Add more unit tests (target 80% coverage)
 2. **High**: Add authentication to API
-3. **Medium**: SDP announcement for auto-discovery
+3. **Medium**: Runtime ptime/latency profiles (low/normal/high)
 4. **Medium**: Multiple concurrent streams
 5. **Low**: WebSocket for real-time UI updates
 6. **Low**: Docker containerization
@@ -269,7 +269,7 @@ Documentation                  ████████████████�
 ## 📝 Sign-Off
 
 **Project**: Go-Radio-Streamer (AES67 RTP Multicast Streaming)  
-**Completion Date**: 31. März 2026  
+**Completion Date**: 4. April 2026  
 **Status**: 🟢 **PRODUCTION READY**  
 **Quality**: Enterprise-grade with comprehensive documentation
 

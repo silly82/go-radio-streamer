@@ -68,7 +68,7 @@ go-radio-streamer/
 
 **Key Information**:
 - Build command: `CGO_ENABLED=0 go build -o radio-streamer ./cmd`
-- API endpoints (3 total)
+- API endpoints (5 total)
 - Multicast address: 239.0.0.1:5004
 - MQTT topics for remote control
 
@@ -180,7 +180,7 @@ bash QUICK_REFERENCE.sh
 
 | Metric | Value |
 |--------|-------|
-| Documentation Files | 5 |
+| Documentation Files | 7 |
 | Total Doc Lines | 852+ |
 | Code Files | 9 Go files |
 | Total LOC (Code) | ~1100 |
@@ -301,5 +301,5 @@ Current Checklist Source:
 
 ---
 
-**Last Updated**: 31. März 2026  
+**Last Updated**: 4. April 2026  
 **Status**: 🟢 Complete & Production Ready

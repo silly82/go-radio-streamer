@@ -1,7 +1,7 @@
 # Go-Radio-Streamer Projektstatus
 
 ## 📅 Datum
-31. März 2026
+4. April 2026
 
 ## 📋 Projektübersicht
 Das Go-Radio-Streamer-Projekt ist ein Kommandozeilen-Tool zum Streamen von Radio-Stationen über AES67 (RTP-basiert). Es lädt Stationslisten aus `stations.txt`, dekodiert MP3-Streams und sendet sie als Multicast-Streams.
@@ -28,22 +28,22 @@ go-radio-streamer/
 
 ## 🔍 Erkenntnisse & Aktueller Stand
 - **Kompilierung**: Projekt baut erfolgreich mit `CGO_ENABLED=0 go build`. FFmpeg-Integration für Dekodierung und Resampling.
-- **Laufzeit**: Programm startet, MQTT verbindet zum Broker, HTTP-Server antwortet auf :8080, RTP-Streaming-Loop läuft.
+- **Laufzeit**: Programm startet mit oder ohne MQTT; HTTP-Server antwortet auf :8080, RTP-Streaming-Loop läuft.
 - **Funktionalität**: ✅ **AES67 RTP-Streaming über Multicast aktiviert!**
   - MP3-Dekodierung via FFmpeg (automatisches Resampling auf 48kHz)
-  - RTP-Paket-Erstellung mit pion/rtp (Payload Type 96, L16-Audio)
+   - RTP-Paket-Erstellung mit pion/rtp (Payload Type 97, L24-Audio)
   - Multicast UDP-Sockets (239.0.0.1:5004) funktionieren
   - MQTT-Steuerung und Status-Publishing vollständig
 - **Abhängigkeiten**: 9 Dependencies (pion/rtp, gorilla/mux, paho.mqtt.golang, go-mp3, etc.)
 - **Tests**: 5 Unit-Tests (Streamer 9.3%, Config 35.7% Coverage)
 - **Web/API**: Vollständig implementiert – REST-API für Steuerung, Web-UI für Selektion
-- **MQTT**: Vollständig integriert – Remote-Steuerung und Status-Publishing auf Multicast
+- **MQTT**: Integriert und optional – bei fehlender `mqtt.conf` läuft HTTP/Web ohne MQTT weiter
 - **Stations**: 6 SRF-Streams konfiguriert, M3U-Parser funktioniert
 
 ## ⚠️ Bekannte Limitierungen
 - **Resampling-Qualität**: FFmpeg-Resampling auf 48kHz ist linear, nicht hochwertig wie SoX – aktuell ausreichend für Tests
 - **PTP-Sync**: Nicht implementiert (optional) – uses nur RTP-Timestamps
-- **SDP-Announcement**: Nicht implementiert – manuelle Multicast-Adresse erforderlich
+- **SDP/SAP**: Implementiert – `/api/stream.sdp` + SAP-Announcement verfügbar
 - **Error Recovery**: Grundlegende Fehlerbehandlung, aber kein Reconnect/Retry für FFmpeg-Fehler
 - **Audio-Format**: Nur MP3 über HTTP M3U-URLs, kein lokale Dateien oder andere Formate
 
@@ -60,11 +60,10 @@ go-radio-streamer/
 ## 📝 TODO-Liste (Priorisiert)
 
 ### 🔴 Hochpriorität
-1. **Echte AES67-Implementierung** (noch ausstehend)
-   - Siehe detaillierten Plan in "AES67-Implementierungsplan" unten.
-   - Ersetze Platzhalter in `internal/streamer/streamer.go` durch RTP-Pakete via `pion/rtp`.
-   - Nutze Multicast-Adresse (z.B. `239.0.0.1:5004`) für AES67-kompatiblen Stream.
-   - Integriere Resampling für Sample-Rate-Anpassung (48000 Hz).
+1. ~~**Echte AES67-Implementierung**~~ ✅ ERLEDIGT
+   - RTP-Multicast aktiv (`L24/48000/2`, PT `97`)
+   - SAP/SDP Discovery aktiv
+   - Stabilitätsorientierte Paketisierung und Prebuffering aktiv
 
 2. ~~**Web-Interface wiederherstellen**~~ ✅ ERLEDIGT
    - Erstelle `internal/web/static/index.html` mit Station-Liste und Play/Stop-Buttons.
@@ -77,7 +76,7 @@ go-radio-streamer/
 
 ### 🟡 Mittelpriorität
 4. ~~MQTT-Integration hinzufügen~~ ✅ ERLEDIGT
-   - MQTT-Client für Remote-Steuerung (Topics: radio/play, radio/stop) und Status-Publishing (Topic: radio/current).
+   - MQTT-Client für Remote-Steuerung (Topics: gostreamer/play, gostreamer/stop) und Status-Publishing (Topics: gostreamer/current, gostreamer/heartbeat).
    - Verbindet zu Broker (tcp://192.168.188.62:1883).
 
 5. **Unit-Tests hinzufügen**
@@ -138,22 +137,22 @@ go-radio-streamer/
    - Test: Sende einfache UDP-Pakete an `239.0.0.1:5004` und empfange mit `tcpdump` oder Wireshark.
 
 3. **RTP-Paket-Struktur definieren** ✅ ERLEDIGT
-   - RTP-Header: Version 2, Payload Type 96 (L16), Sequence Number, Timestamp (48 kHz Basis).
-   - Payload: 24-Bit L16-Audio (Big-Endian, Stereo).
+   - RTP-Header: Version 2, Payload Type 97 (L24), Sequence Number, Timestamp (48 kHz Basis).
+   - Payload: 24-Bit PCM Big-Endian (Stereo).
    - Erstelle Struct in `streamer.go`: `type RTPPacket struct { Header *rtp.Header; Payload []byte }`.
    - Funktion: `createRTPPacket(audioData []byte, seq uint16, timestamp uint32) *RTPPacket`. ✅ IMPLEMENTIERT MIT pion/rtp
 
 #### Phase 2: Audio-Verarbeitungspipeline (2-3 Tage) 🔄 IN ARBEIT
 4. **Audio-Datenfluss integrieren** 🔄 TEILWEISE
    - In `Start()`: Nach MP3-Dekodierung, resample auf 48 kHz (falls nötig, z.B. von 44.1 kHz). ✅ STARTET, ABER RESAMPLING AUSSTEHEND (CGO-Konflikt)
-   - Buffer: Sammle 1 ms Audio (48 Samples bei 48 kHz) pro RTP-Paket. ✅ IMPLEMENTIERT MIT TICKER
-   - Timing: Verwende `time.Ticker` für 1 ms-Intervalle, um Pakete zu senden. ✅ IMPLEMENTIERT
+   - Buffer: Sender-Queue + Prebuffer für Jitter-Glättung. ✅ IMPLEMENTIERT
+   - Timing: Stabilitätsorientierte Paketisierung (`ptime=40ms`) mit kontinuierlichem RTP-Takt. ✅ IMPLEMENTIERT
    - Funktion: `processAudioLoop(conn *net.UDPConn, audioStream io.Reader)` – liest dekodiertes PCM, resamplet, packt in RTP, sendet. ✅ `streamAudio` IMPLEMENTIERT
 
 5. **Resampling implementieren** ✅ ERLEDIGT
    - Verwende FFmpeg für MP3-Dekodierung und Resampling auf 48kHz. ✅ IMPLEMENTIERT
    - Input: MP3-Stream über HTTP. ✅ Mit FFmpeg decoder
-   - Output: 48 kHz, 16-Bit Stereo (L16 für AES67). ✅ FFmpeg output format
+   - Output: 48 kHz, 24-Bit Stereo (`s24be` / L24 für AES67). ✅ FFmpeg output format
    - FFmpeg-Prozess wird mit Goroutine verwaltet. ✅ IMPLEMENTIERT
 
 6. **RTP-Timing und Sequence** ✅ IMPLEMENTIERT
@@ -220,9 +219,9 @@ go-radio-streamer/
 - **Abhängigkeiten**: 9 Direct, ~15 Transitive
 - **Build-Zeit**: <1 Sekunde (CGO=0)
 - **Test-Coverage**: Streamer 9.3%, Config 35.7% (5 Unit-Tests bestanden)
-- **Streaming-Format**: RTP/L16, 48kHz, Stereo, Multicast
+- **Streaming-Format**: RTP/L24, 48kHz, Stereo, Multicast
 - **API-Endpoints**: 3 (GET /api/stations, POST /api/play, POST /api/stop)
-- **MQTT-Topics**: 3 (radio/play, radio/stop, radio/current)
+- **MQTT-Topics**: 4 (gostreamer/play, gostreamer/stop, gostreamer/current, gostreamer/heartbeat)
 - **Web-Port**: 8080
 - **Multicast-Address**: 239.0.0.1:5004
 - **Status**: 🟢 FUNKTIONSFÄHIG – AES67 RTP-Streaming aktiv

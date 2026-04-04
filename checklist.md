@@ -15,6 +15,8 @@ Stand: 4. April 2026
 - [x] SAP-Ankündigung aktiv auf `239.255.255.255:9875`
 - [x] SDP-Generierung verfügbar über `GET /api/stream.sdp`
 - [x] Shutdown-Race/`closed network connection`-Spam behoben
+- [x] Stabiler Senderwechsel implementiert (sauberer Stop/Start im Backend)
+- [x] Server-Start ohne `mqtt.conf` bzw. ohne MQTT-Broker möglich (HTTP/Web-only)
 
 ## ✅ Stabilitäts-Optimierungen (gegen Stottern)
 
