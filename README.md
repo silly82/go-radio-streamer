@@ -1,5 +1,9 @@
 # 🎙️ go-radio-streamer
 
+[![Go Version](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Raspberry%20Pi-2ea44f)](./RASPBERRY_PI_SETUP.md)
+
 Go service that takes an internet radio stream (MP3), decodes/resamples it via FFmpeg, and sends it as AES67-style RTP multicast (`L24/48000/2`) with Web UI, REST API, MQTT control, ICY metadata, and SAP/SDP announcement.
 
 ## 🚀 Installation
