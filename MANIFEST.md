@@ -12,6 +12,7 @@
 | File | Size | Purpose | Audience |
 |------|------|---------|----------|
 | `README.md` | 10.3 KB | User guide, setup, troubleshooting | Users, Developers |
+| `RASPBERRY_PI_SETUP.md` | 6.0 KB | Raspberry Pi OS install and operation guide | Operators, Homelab |
 | `checklist.md` | 2.0 KB | Final checklist (current source) | PMs, QA, Devs |
 | `status.md` | 12.3 KB | Project status, phases, milestones | PMs, Tech Leads |
 | `FINAL_SUMMARY.md` | 8.3 KB | Executive summary, metrics | Executives, Stakeholders |
@@ -65,8 +66,8 @@ Packages:               5 (api, config, mqtt, streamer, web)
 
 ### Documentation Metrics
 ```
-Documentation Files:    6
-Total Doc Lines:        850+
+Documentation Files:    8
+Total Doc Lines:        900+
 README:                 344 lines
 Status:                 228 lines
 Final Summary:          280 lines
@@ -74,7 +75,7 @@ Final Summary:          280 lines
 
 ### Build Information
 ```
-Language:               Go 1.25.7+
+Language:               Go 1.26+
 Build Mode:             CGO_ENABLED=0 (pure Go)
 Binary Size:            11 MB
 Build Time:             <1 second
@@ -286,7 +287,7 @@ Coverage:           9.3%-35.7%
 - Proper package structure
 
 ✅ **Comprehensive Documentation**
-- 6 documentation files
+- 8 documentation files
 - 850+ lines of guides
 - Examples & troubleshooting
 
@@ -394,6 +395,7 @@ All objectives achieved. Application is ready for deployment and use.
 
 **Documentation**:
 - README.md (user guide)
+- RASPBERRY_PI_SETUP.md (Raspberry Pi installation)
 - status.md (project status)
 - FINAL_SUMMARY.md (executive summary)
 - INDEX.md (documentation index)
@@ -412,10 +414,11 @@ All objectives achieved. Application is ready for deployment and use.
 ## 🎯 Next Steps
 
 1. Review documentation (start with README.md)
-2. Build the project
-3. Configure stations.txt
-4. Run ./radio-streamer
-5. Access http://localhost:8080
+2. Raspberry Pi users: follow RASPBERRY_PI_SETUP.md
+3. Build the project
+4. Configure stations.txt
+5. Run ./radio-streamer
+6. Access http://localhost:8080
 
 ---
 

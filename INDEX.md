@@ -5,6 +5,7 @@
 ```
 go-radio-streamer/
 ├── README.md              ← START HERE (User Guide)
+├── RASPBERRY_PI_SETUP.md  ← Raspberry Pi OS Installation
 ├── checklist.md           ← Final Checklist (current)
 ├── status.md              ← Project Status & Phase Milestones
 ├── FINAL_SUMMARY.md       ← Executive Summary
@@ -19,6 +20,10 @@ go-radio-streamer/
 ### "I want to get started quickly"
 👉 **Read**: `README.md` (Quick Start section)  
 ⏱️ **Time**: 5 minutes
+
+### "I want to install on Raspberry Pi"
+👉 **Read**: `RASPBERRY_PI_SETUP.md`  
+⏱️ **Time**: 10-15 minutes
 
 ### "I want to understand the project status"
 👉 **Read**: `status.md` (Current Stand section)  
@@ -141,6 +146,20 @@ bash QUICK_REFERENCE.sh
 
 **Use When**: You need a quick reminder of commands or endpoints
 
+### RASPBERRY_PI_SETUP.md
+**Purpose**: End-to-end installation guide for Raspberry Pi OS
+
+**Sections**:
+- System preparation (apt packages)
+- Go version requirements (`go.mod` compatibility)
+- Build and local run
+- Optional MQTT setup
+- systemd autostart service
+- Multicast/network diagnostics
+- Raspberry Pi specific troubleshooting
+
+**Audience**: Raspberry Pi users, Homelab admins, operators
+
 ---
 
 ## 🔗 Cross-References
@@ -180,7 +199,7 @@ bash QUICK_REFERENCE.sh
 
 | Metric | Value |
 |--------|-------|
-| Documentation Files | 7 |
+| Documentation Files | 8 |
 | Total Doc Lines | 852+ |
 | Code Files | 9 Go files |
 | Total LOC (Code) | ~1100 |
@@ -196,6 +215,9 @@ bash QUICK_REFERENCE.sh
 
 ### Task: Deploy to Production
 **Read**: README.md (Deployment Instructions) + FINAL_SUMMARY.md (Deployment)
+
+### Task: Install on Raspberry Pi
+**Read**: RASPBERRY_PI_SETUP.md
 
 ### Task: Configure Radio Stations
 **Read**: README.md (Configuration Files) + stations.txt example
@@ -225,6 +247,7 @@ bash QUICK_REFERENCE.sh
 ```
 Documentation/
 ├── README.md              → User Guide (Start here)
+├── RASPBERRY_PI_SETUP.md  → Raspberry Pi Installation
 ├── status.md              → Project Status
 ├── FINAL_SUMMARY.md       → Executive Report
 ├── QUICK_REFERENCE.sh     → Command Quick Links

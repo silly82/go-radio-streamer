@@ -18,9 +18,12 @@ Go service that takes an internet radio stream (MP3), decodes/resamples it via F
 
 ## Requirements
 
-- Go (project currently built with Go 1.25.x)
+- Go (project currently built with Go 1.26.x)
 - FFmpeg in `PATH`
 - MQTT broker optional (`mqtt.conf` may be missing; HTTP/Web still starts)
+
+Raspberry Pi deployment:
+- See `RASPBERRY_PI_SETUP.md` for a full Raspberry Pi OS installation guide.
 
 Examples:
 
@@ -229,6 +232,10 @@ ffmpeg -version
 - Server starts anyway (HTTP/Web only mode)
 - MQTT control/status is disabled until valid `mqtt.conf` is present
 
+### Raspberry Pi install
+
+- Full setup (packages, Go version, systemd, multicast checks): `RASPBERRY_PI_SETUP.md`
+
 ## Development
 
 ```bash
@@ -241,6 +248,7 @@ go build -o radio-streamer ./cmd
 
 ```text
 go-radio-streamer/
+├── RASPBERRY_PI_SETUP.md
 ├── cmd/main.go
 ├── internal/
 │   ├── api/handlers.go
