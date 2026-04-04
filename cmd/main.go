@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"go-radio-streamer/internal/api"
 	"go-radio-streamer/internal/config"
@@ -9,6 +10,7 @@ import (
 	"go-radio-streamer/internal/web"
 	"log"
 	"net/http"
+	"os"
 )
 
 func main() {
@@ -19,7 +21,12 @@ func main() {
 
 	mqttConfig, err := config.LoadMQTTConfig("mqtt.conf")
 	if err != nil {
-		log.Fatalf("failed to load MQTT config: %v", err)
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("Warning: mqtt.conf not found, MQTT disabled (HTTP/Web UI still available)")
+		} else {
+			log.Printf("Warning: failed to load MQTT config, MQTT disabled: %v", err)
+		}
+		mqttConfig = nil
 	}
 
 	// Create streamer with nil publish func initially
@@ -28,18 +35,20 @@ func main() {
 		log.Fatalf("failed to create streamer: %v", err)
 	}
 
-	// Setup MQTT client in streamer
-	err = s.SetupMQTTClient(mqttConfig.Broker, mqttConfig.User, mqttConfig.Password)
-	if err != nil {
-		log.Printf("Warning: MQTT setup failed: %v", err)
+	if mqttConfig != nil {
+		// Setup MQTT client in streamer
+		err = s.SetupMQTTClient(mqttConfig.Broker, mqttConfig.User, mqttConfig.Password)
+		if err != nil {
+			log.Printf("Warning: MQTT setup failed: %v", err)
+		}
+
+		// Setup MQTT handler (legacy, kept for API compatibility)
+		mqttHandler := mqtt.NewHandler(s, stations)
+		mqttHandler.SetupMQTT(mqttConfig.Broker, mqttConfig.User, mqttConfig.Password)
+
+		// Set publish func
+		s.SetPublishFunc(mqttHandler.Publish)
 	}
-
-	// Setup MQTT handler (legacy, kept for API compatibility)
-	mqttHandler := mqtt.NewHandler(s, stations)
-	mqttHandler.SetupMQTT(mqttConfig.Broker, mqttConfig.User, mqttConfig.Password)
-
-	// Set publish func
-	s.SetPublishFunc(mqttHandler.Publish)
 
 	// Setup router
 	router := api.NewRouter(s, stations)
