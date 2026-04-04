@@ -279,25 +279,55 @@ func (fr *ffmpegReader) Read(p []byte) (n int, err error) {
 }
 
 func (fr *ffmpegReader) Close() error {
-	fr.reader.Close()
-	fr.cmd.Wait()
-	return nil
+	var closeErr error
+	if fr.reader != nil {
+		if err := fr.reader.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			closeErr = err
+		}
+	}
+
+	if fr.cmd == nil {
+		return closeErr
+	}
+
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- fr.cmd.Wait()
+	}()
+
+	select {
+	case waitErr := <-waitCh:
+		if waitErr != nil && closeErr == nil {
+			closeErr = waitErr
+		}
+	case <-time.After(2 * time.Second):
+		if fr.cmd.Process != nil {
+			_ = fr.cmd.Process.Kill()
+		}
+		waitErr := <-waitCh
+		if waitErr != nil && closeErr == nil {
+			closeErr = waitErr
+		}
+	}
+
+	return closeErr
 }
 
 // streamAudio handles the audio streaming loop.
 func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
-	defer func() {
-		s.running = false
-		close(s.streamDone)
-	}()
-
 	// Use FFmpeg to decode and resample
 	audioReader, err := decodeAndResampleWithFFmpeg(streamURL)
 	if err != nil {
 		log.Printf("Failed to setup FFmpeg: %v", err)
+		s.running = false
+		close(s.streamDone)
 		return
 	}
 	defer audioReader.Close()
+	defer func() {
+		s.running = false
+		close(s.streamDone)
+	}()
 
 	seq := uint16(0)
 	timestamp := uint32(0)
@@ -440,7 +470,14 @@ prebufferLoop:
 // Start begins streaming the given station.
 func (s *Streamer) Start(station config.Station, multicastAddress string) error {
 	if s.running {
-		return fmt.Errorf("streamer is already running")
+		if s.currentStation == station.Name {
+			log.Printf("Station %s is already running", station.Name)
+			return nil
+		}
+
+		log.Printf("Switching station from %s to %s", s.currentStation, station.Name)
+		s.Stop()
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	s.station = station

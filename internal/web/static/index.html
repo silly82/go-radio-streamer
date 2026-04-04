@@ -200,11 +200,6 @@
         }
 
         async function playStation(num) {
-            // Stop current station if different
-            if (currentStation !== null && currentStation !== num) {
-                await fetch('/api/stop', { method: 'POST' });
-            }
-
             // Play new station
             const response = await fetch('/api/play', {
                 method: 'POST',
