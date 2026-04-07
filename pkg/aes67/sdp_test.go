@@ -53,6 +53,8 @@ func TestBuildSDP_Defaults(t *testing.T) {
 		"m=audio 5004 RTP/AVP 97",
 		"a=rtpmap:97 L24/48000/2",
 		"a=ptime:40",
+		"a=maxptime:40",
+		"a=sendonly",
 	}
 	for _, e := range expected {
 		if !strings.Contains(sdp, e) {
@@ -63,6 +65,19 @@ func TestBuildSDP_Defaults(t *testing.T) {
 	refClk := LocalRefClock()
 	if !strings.Contains(sdp, "a=ts-refclk:"+refClk) {
 		t.Errorf("expected 'a=ts-refclk:%s' in SDP, got:\n%s", refClk, sdp)
+	}
+}
+
+func TestBuildSDP_SendonlyAndMaxptime(t *testing.T) {
+	sdp := BuildSDP("test", "239.1.2.3", "10.0.0.1", 5004, 97, DefaultPTPRefClock, 1)
+	if !strings.Contains(sdp, "a=sendonly") {
+		t.Errorf("SDP must contain 'a=sendonly' for AES67 compliance, got:\n%s", sdp)
+	}
+	if !strings.Contains(sdp, "a=maxptime:1") {
+		t.Errorf("SDP must contain 'a=maxptime:1' matching ptime, got:\n%s", sdp)
+	}
+	if !strings.Contains(sdp, "a=ptime:1") {
+		t.Errorf("SDP must contain 'a=ptime:1', got:\n%s", sdp)
 	}
 }
 
