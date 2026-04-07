@@ -45,6 +45,10 @@ func main() {
 		log.Fatalf("failed to create streamer: %v", err)
 	}
 
+	// Apply reference clock from config (empty = use localmac, which is the
+	// correct default when no external PTP grandmaster clock is present).
+	s.SetRefClock(streamerConfig.PTPRefClock)
+
 	if mqttConfig != nil {
 		// Setup MQTT client in streamer
 		err = s.SetupMQTTClient(mqttConfig.Broker, mqttConfig.User, mqttConfig.Password)
@@ -61,7 +65,7 @@ func main() {
 	}
 
 	// Setup router
-	router := api.NewRouter(s, stations, streamerConfig.MulticastAddress)
+	router := api.NewRouter(s, stations, streamerConfig.MulticastAddress, s.RefClock())
 	web.SetupRoutes(router.Router)
 
 	fmt.Println("Server starting on :8080")

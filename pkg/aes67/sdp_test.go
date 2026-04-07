@@ -45,6 +45,7 @@ func TestBuildSDP_AutoOriginIP(t *testing.T) {
 }
 
 func TestBuildSDP_Defaults(t *testing.T) {
+	// When tsRefClk is empty, BuildSDP should fall back to localmac.
 	sdp := BuildSDP("", "", "10.0.0.1", 0, 0, "", 0)
 	expected := []string{
 		"s=gostreamer",
@@ -52,11 +53,47 @@ func TestBuildSDP_Defaults(t *testing.T) {
 		"m=audio 5004 RTP/AVP 97",
 		"a=rtpmap:97 L24/48000/2",
 		"a=ptime:40",
-		"a=ts-refclk:ptp=" + DefaultPTPRefClock,
 	}
 	for _, e := range expected {
 		if !strings.Contains(sdp, e) {
 			t.Errorf("expected %q in SDP, got:\n%s", e, sdp)
 		}
+	}
+	// Verify the localmac reference clock line has a properly-formatted MAC.
+	refClk := LocalRefClock()
+	if !strings.Contains(sdp, "a=ts-refclk:"+refClk) {
+		t.Errorf("expected 'a=ts-refclk:%s' in SDP, got:\n%s", refClk, sdp)
+	}
+}
+
+func TestBuildSDP_ExplicitPTPRefClock(t *testing.T) {
+	sdp := BuildSDP("test", "239.1.2.3", "10.0.0.1", 5004, 97, DefaultPTPRefClock, 40)
+	want := "a=ts-refclk:" + DefaultPTPRefClock
+	if !strings.Contains(sdp, want) {
+		t.Errorf("expected %q in SDP, got:\n%s", want, sdp)
+	}
+}
+
+func TestBuildSDP_LocalRefClock(t *testing.T) {
+	refClk := LocalRefClock()
+	if !strings.HasPrefix(refClk, "localmac=") {
+		t.Errorf("LocalRefClock() should start with 'localmac=', got %q", refClk)
+	}
+	sdp := BuildSDP("test", "239.1.2.3", "10.0.0.1", 5004, 97, refClk, 40)
+	want := "a=ts-refclk:" + refClk
+	if !strings.Contains(sdp, want) {
+		t.Errorf("expected %q in SDP, got:\n%s", want, sdp)
+	}
+}
+
+func TestGetLocalMAC(t *testing.T) {
+	mac := GetLocalMAC()
+	if mac == "" {
+		t.Fatal("GetLocalMAC returned empty string")
+	}
+	// Should be either "00-00-00-00-00-00" (fallback) or a valid MAC
+	parts := strings.Split(mac, "-")
+	if len(parts) != 6 {
+		t.Errorf("GetLocalMAC returned unexpected format: %q", mac)
 	}
 }
