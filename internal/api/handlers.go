@@ -37,6 +37,7 @@ func NewRouter(s *streamer.Streamer, stations []config.Station, multicastAddress
 func (r *Router) setupRoutes() {
 	r.HandleFunc("/api/stations", r.handleStations).Methods("GET")
 	r.HandleFunc("/api/status", r.handleStatus).Methods("GET")
+	r.HandleFunc("/api/diag", r.handleDiag).Methods("GET")
 	r.HandleFunc("/api/stream.sdp", r.handleSDP).Methods("GET")
 	r.HandleFunc("/api/play", r.handlePlay).Methods("POST")
 	r.HandleFunc("/api/stop", r.handleStop).Methods("POST")
@@ -50,6 +51,57 @@ func (r *Router) handleStations(w http.ResponseWriter, req *http.Request) {
 func (r *Router) handleStatus(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(r.streamer.CurrentStatus())
+}
+
+// diagResponse combines live streaming diagnostics with the current SDP so that
+// operators can verify the multicast configuration and packet flow in one call.
+type diagResponse struct {
+	Running       bool   `json:"running"`
+	Station       string `json:"station,omitempty"`
+	MulticastAddr string `json:"multicast_addr,omitempty"`
+	StreamURL     string `json:"stream_url,omitempty"`
+	PacketsSent   int64  `json:"packets_sent"`
+	BytesSent     int64  `json:"bytes_sent"`
+	Underruns     int64  `json:"underruns"`
+	LastSentUnix  int64  `json:"last_sent_unix"`
+	SDP           string `json:"sdp"`
+}
+
+func (r *Router) handleDiag(w http.ResponseWriter, req *http.Request) {
+	status := r.streamer.CurrentStatus()
+	stats := r.streamer.DiagStats()
+
+	multicastIP, portStr, err := net.SplitHostPort(r.multicastAddress)
+	port := 5004
+	if err == nil {
+		if p, err2 := strconv.Atoi(portStr); err2 == nil && p > 0 {
+			port = p
+		}
+	} else {
+		multicastIP = r.multicastAddress
+	}
+
+	sessionName := status.Station
+	if sessionName == "" {
+		sessionName = "gostreamer"
+	}
+
+	sdp := aes67.BuildSDP(sessionName, multicastIP, "", port, 97, r.refClock, aes67.DefaultPtimeMs)
+
+	resp := diagResponse{
+		Running:       status.Running,
+		Station:       status.Station,
+		MulticastAddr: r.multicastAddress,
+		StreamURL:     stats.StreamURL,
+		PacketsSent:   stats.PacketsSent,
+		BytesSent:     stats.BytesSent,
+		Underruns:     stats.Underruns,
+		LastSentUnix:  stats.LastSentUnix,
+		SDP:           sdp,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (r *Router) handleSDP(w http.ResponseWriter, req *http.Request) {
