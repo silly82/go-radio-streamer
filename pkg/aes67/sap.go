@@ -111,7 +111,6 @@ func (a *SAPAnnouncer) send(deletion bool) {
 
 	packet := a.buildPacket(deletion)
 	_, _ = a.conn.Write(packet)
-	a.messageID++
 }
 
 func (a *SAPAnnouncer) buildPacket(deletion bool) []byte {
