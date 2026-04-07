@@ -83,8 +83,42 @@ func TestSetPublishFunc(t *testing.T) {
 	}
 }
 
+func TestCurrentStatusDiagnostics(t *testing.T) {
+	s, err := NewStreamer(nil)
+	if err != nil {
+		t.Fatalf("NewStreamer failed: %v", err)
+	}
+
+	// Initial state: all diagnostics should be zero
+	status := s.CurrentStatus()
+	if status.PacketsSent != 0 {
+		t.Errorf("initial PacketsSent = %d, want 0", status.PacketsSent)
+	}
+	if status.SilencePackets != 0 {
+		t.Errorf("initial SilencePackets = %d, want 0", status.SilencePackets)
+	}
+	if status.LastAudioPacketAt != 0 {
+		t.Errorf("initial LastAudioPacketAt = %d, want 0", status.LastAudioPacketAt)
+	}
+
+	// Simulate packets being counted
+	s.packetsSent.Add(100)
+	s.silencePackets.Add(5)
+	s.lastAudioPacketAt.Store(1234567890)
+
+	status = s.CurrentStatus()
+	if status.PacketsSent != 100 {
+		t.Errorf("PacketsSent = %d, want 100", status.PacketsSent)
+	}
+	if status.SilencePackets != 5 {
+		t.Errorf("SilencePackets = %d, want 5", status.SilencePackets)
+	}
+	if status.LastAudioPacketAt != 1234567890 {
+		t.Errorf("LastAudioPacketAt = %d, want 1234567890", status.LastAudioPacketAt)
+	}
+}
+
 func TestFloatToInt16Conversion(t *testing.T) {
-	// Test float64 to int16 conversion used in audio processing
 	tests := []struct {
 		input float64
 		name  string

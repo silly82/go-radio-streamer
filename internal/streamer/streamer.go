@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go-radio-streamer/internal/config"
@@ -36,11 +37,14 @@ type Metadata struct {
 }
 
 type Status struct {
-	Running     bool   `json:"running"`
-	Station     string `json:"station"`
-	Artist      string `json:"artist"`
-	Track       string `json:"track"`
-	MetaUpdated int64  `json:"meta_updated"`
+	Running           bool   `json:"running"`
+	Station           string `json:"station"`
+	Artist            string `json:"artist"`
+	Track             string `json:"track"`
+	MetaUpdated       int64  `json:"meta_updated"`
+	PacketsSent       int64  `json:"packets_sent"`
+	SilencePackets    int64  `json:"silence_packets"`
+	LastAudioPacketAt int64  `json:"last_audio_packet_at"`
 }
 
 // Streamer manages the audio stream.
@@ -57,6 +61,11 @@ type Streamer struct {
 	metadata       Metadata
 	sapAnnouncer   *aes67.SAPAnnouncer
 	refClock       string // full a=ts-refclk value, e.g. "localmac=…" or "ptp=…"
+
+	// Stream diagnostics (updated atomically by the streaming goroutine)
+	packetsSent       atomic.Int64
+	silencePackets    atomic.Int64
+	lastAudioPacketAt atomic.Int64 // Unix timestamp of the last real-audio packet
 }
 
 // NewStreamer creates a new Streamer.
@@ -99,11 +108,14 @@ func (s *Streamer) SetupMQTTClient(broker, username, password string) error {
 
 func (s *Streamer) CurrentStatus() Status {
 	return Status{
-		Running:     s.running,
-		Station:     s.currentStation,
-		Artist:      s.metadata.Artist,
-		Track:       s.metadata.Track,
-		MetaUpdated: s.metadata.Updated.Unix(),
+		Running:           s.running,
+		Station:           s.currentStation,
+		Artist:            s.metadata.Artist,
+		Track:             s.metadata.Track,
+		MetaUpdated:       s.metadata.Updated.Unix(),
+		PacketsSent:       s.packetsSent.Load(),
+		SilencePackets:    s.silencePackets.Load(),
+		LastAudioPacketAt: s.lastAudioPacketAt.Load(),
 	}
 }
 
@@ -465,10 +477,12 @@ prebufferLoop:
 			}
 		case <-ticker.C:
 			payload := silencePayload
+			isSilence := true
 			if len(pending) > 0 {
 				payload = pending[0]
 				pending = pending[1:]
 				underrunCount = 0
+				isSilence = false
 			} else {
 				underrunCount++
 				if underrunCount == 1 || underrunCount%25 == 0 {
@@ -488,6 +502,13 @@ prebufferLoop:
 					return
 				}
 				log.Printf("Failed to send RTP packet: %v", err)
+			} else {
+				s.packetsSent.Add(1)
+				if isSilence {
+					s.silencePackets.Add(1)
+				} else {
+					s.lastAudioPacketAt.Store(time.Now().Unix())
+				}
 			}
 
 			seq++
@@ -512,6 +533,11 @@ func (s *Streamer) Start(station config.Station, multicastAddress string) error 
 	s.station = station
 	s.currentStation = station.Name
 	log.Printf("Starting stream for %s", s.station.Name)
+
+	// Reset stream diagnostics for the new session
+	s.packetsSent.Store(0)
+	s.silencePackets.Store(0)
+	s.lastAudioPacketAt.Store(0)
 
 	// Setup multicast socket
 	conn, err := setupMulticastSocket(multicastAddress)

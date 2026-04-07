@@ -135,6 +135,34 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+        .diagnostics {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        .diagnostics h2 {
+            margin-top: 0;
+        }
+        .diag-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .diag-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .diag-table td:first-child {
+            color: #555;
+            width: 55%;
+        }
+        .diag-table td:last-child {
+            font-weight: bold;
+        }
+        .diag-ok { color: #4caf50; }
+        .diag-warn { color: #ff9800; }
+        .diag-error { color: #f44336; }
     </style>
 </head>
 <body>
@@ -155,6 +183,32 @@
         <button class="btn-stop-all" onclick="stopAll()">⏹️ Alle stoppen</button>
     </div>
 
+    <div class="diagnostics" id="diagnostics-panel">
+        <h2>🔍 Stream-Diagnose</h2>
+        <table class="diag-table">
+            <tr>
+                <td>Gesendete RTP-Pakete</td>
+                <td id="diag-packets">–</td>
+            </tr>
+            <tr>
+                <td>Stille-Pakete (Underrun)</td>
+                <td id="diag-silence">–</td>
+            </tr>
+            <tr>
+                <td>Stille-Anteil</td>
+                <td id="diag-silence-ratio">–</td>
+            </tr>
+            <tr>
+                <td>Letztes Audio-Paket</td>
+                <td id="diag-last-audio">–</td>
+            </tr>
+            <tr>
+                <td>Audio-Status</td>
+                <td id="diag-audio-status">–</td>
+            </tr>
+        </table>
+    </div>
+
     <script>
         let currentStation = null;
         let currentStatus = null;
@@ -173,6 +227,7 @@
                 currentStation = currentStation >= 0 && status.running ? currentStation + 1 : null;
                 updateCurrentStation(currentStatus);
                 updateUI();
+                updateDiagnostics(status);
             } catch (error) {
                 console.error('Status refresh failed', error);
             }
@@ -260,6 +315,72 @@
                 artistEl.textContent = 'Artist: -';
                 trackEl.textContent = 'Titel: -';
                 metaEl.hidden = true;
+            }
+        }
+
+        // Thresholds for silence-ratio colour coding
+        const SILENCE_RATIO_ERROR_THRESHOLD = 50; // % above this → red
+        const SILENCE_RATIO_WARN_THRESHOLD  = 10; // % above this → orange
+        // Thresholds for last-audio-packet staleness (seconds)
+        const AUDIO_STALE_WARN_SECS  = 10;
+        const AUDIO_STALE_ERROR_SECS = 60;
+
+        function updateDiagnostics(status) {
+            const packetsEl = document.getElementById('diag-packets');
+            const silenceEl = document.getElementById('diag-silence');
+            const ratioEl = document.getElementById('diag-silence-ratio');
+            const lastAudioEl = document.getElementById('diag-last-audio');
+            const audioStatusEl = document.getElementById('diag-audio-status');
+
+            if (!status || !status.running) {
+                packetsEl.textContent = '–';
+                silenceEl.textContent = '–';
+                ratioEl.textContent = '–';
+                lastAudioEl.textContent = '–';
+                audioStatusEl.textContent = '–';
+                audioStatusEl.className = '';
+                return;
+            }
+
+            const total = status.packets_sent || 0;
+            const silence = status.silence_packets || 0;
+            const lastAudio = status.last_audio_packet_at || 0;
+
+            packetsEl.textContent = total.toLocaleString();
+            silenceEl.textContent = silence.toLocaleString();
+
+            if (total > 0) {
+                const ratio = (silence / total * 100).toFixed(1);
+                ratioEl.textContent = ratio + ' %';
+                ratioEl.className = ratio > SILENCE_RATIO_ERROR_THRESHOLD ? 'diag-error'
+                    : ratio > SILENCE_RATIO_WARN_THRESHOLD ? 'diag-warn' : 'diag-ok';
+            } else {
+                ratioEl.textContent = '–';
+                ratioEl.className = '';
+            }
+
+            if (lastAudio > 0) {
+                const d = new Date(lastAudio * 1000);
+                lastAudioEl.textContent = d.toLocaleTimeString();
+                const secAgo = Math.floor(Date.now() / 1000) - lastAudio;
+                if (secAgo < AUDIO_STALE_WARN_SECS) {
+                    audioStatusEl.textContent = '✅ Audio fließt';
+                    audioStatusEl.className = 'diag-ok';
+                } else if (secAgo < AUDIO_STALE_ERROR_SECS) {
+                    audioStatusEl.textContent = `⚠️ Vor ${secAgo}s – prüfen`;
+                    audioStatusEl.className = 'diag-warn';
+                } else {
+                    audioStatusEl.textContent = `❌ Kein Audio seit ${secAgo}s`;
+                    audioStatusEl.className = 'diag-error';
+                }
+            } else if (total > 0) {
+                lastAudioEl.textContent = 'Noch kein Audio-Paket';
+                audioStatusEl.textContent = '❌ Nur Stille gesendet';
+                audioStatusEl.className = 'diag-error';
+            } else {
+                lastAudioEl.textContent = '–';
+                audioStatusEl.textContent = '⏳ Warten auf Daten…';
+                audioStatusEl.className = 'diag-warn';
             }
         }
 
