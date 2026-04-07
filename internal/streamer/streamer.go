@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go-radio-streamer/internal/config"
@@ -43,6 +44,17 @@ type Status struct {
 	MetaUpdated int64  `json:"meta_updated"`
 }
 
+// DiagStats holds live diagnostic counters for the RTP stream.
+// All fields are safe to read concurrently.
+type DiagStats struct {
+	PacketsSent   int64  `json:"packets_sent"`
+	BytesSent     int64  `json:"bytes_sent"`
+	Underruns     int64  `json:"underruns"`
+	LastSentUnix  int64  `json:"last_sent_unix"` // Unix timestamp of last successfully-sent packet; 0 if none yet
+	StreamURL     string `json:"stream_url,omitempty"`
+	MulticastAddr string `json:"multicast_addr,omitempty"`
+}
+
 // Streamer manages the audio stream.
 type Streamer struct {
 	station        config.Station
@@ -57,6 +69,14 @@ type Streamer struct {
 	metadata       Metadata
 	sapAnnouncer   *aes67.SAPAnnouncer
 	refClock       string // full a=ts-refclk value, e.g. "localmac=…" or "ptp=…"
+
+	// Diagnostic counters – updated atomically from the streaming goroutine.
+	diagPacketsSent   atomic.Int64
+	diagBytesSent     atomic.Int64
+	diagUnderruns     atomic.Int64
+	diagLastSent      atomic.Int64 // Unix timestamp
+	diagStreamURL     atomic.Value // string
+	diagMulticastAddr atomic.Value // string
 }
 
 // NewStreamer creates a new Streamer.
@@ -72,6 +92,21 @@ func NewStreamer(publishFunc func(topic string, message string)) (*Streamer, err
 // RefClock returns the current reference clock value used in SDP announcements.
 func (s *Streamer) RefClock() string {
 	return s.refClock
+}
+
+// DiagStats returns a snapshot of the current streaming diagnostic counters.
+// It is safe to call from any goroutine.
+func (s *Streamer) DiagStats() DiagStats {
+	streamURL, _ := s.diagStreamURL.Load().(string)
+	multicastAddr, _ := s.diagMulticastAddr.Load().(string)
+	return DiagStats{
+		PacketsSent:   s.diagPacketsSent.Load(),
+		BytesSent:     s.diagBytesSent.Load(),
+		Underruns:     s.diagUnderruns.Load(),
+		LastSentUnix:  s.diagLastSent.Load(),
+		StreamURL:     streamURL,
+		MulticastAddr: multicastAddr,
+	}
 }
 
 // SetRefClock configures the reference clock advertised in the SDP.
@@ -226,6 +261,12 @@ func setupMulticastSocket(multicastAddr string) (*net.UDPConn, error) {
 		return nil, fmt.Errorf("failed to set multicast TTL: %w", err)
 	}
 
+	// Enable multicast loopback so that receivers on the same host (e.g. ffplay
+	// or Wireshark) can receive the stream during local testing.
+	if err := p.SetMulticastLoopback(true); err != nil {
+		log.Printf("Warning: failed to enable multicast loopback: %v", err)
+	}
+
 	return conn, nil
 }
 
@@ -349,6 +390,12 @@ func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
 		close(s.streamDone)
 	}()
 
+	// Reset diagnostic counters for this new streaming session.
+	s.diagPacketsSent.Store(0)
+	s.diagBytesSent.Store(0)
+	s.diagUnderruns.Store(0)
+	s.diagLastSent.Store(0)
+
 	seq := uint16(0)
 
 	const (
@@ -471,6 +518,7 @@ prebufferLoop:
 				underrunCount = 0
 			} else {
 				underrunCount++
+				s.diagUnderruns.Add(1)
 				if underrunCount == 1 || underrunCount%25 == 0 {
 					log.Printf("RTP buffer underrun: sending silence (count=%d)", underrunCount)
 				}
@@ -488,6 +536,10 @@ prebufferLoop:
 					return
 				}
 				log.Printf("Failed to send RTP packet: %v", err)
+			} else {
+				s.diagPacketsSent.Add(1)
+				s.diagBytesSent.Add(int64(len(rtpBuf)))
+				s.diagLastSent.Store(time.Now().Unix())
 			}
 
 			seq++
@@ -531,6 +583,10 @@ func (s *Streamer) Start(station config.Station, multicastAddress string) error 
 
 	// Fetch ICY metadata for artist/track in background
 	s.updateMetadataAsync(streamURL)
+
+	// Store stream URL and multicast address for diagnostics.
+	s.diagStreamURL.Store(streamURL)
+	s.diagMulticastAddr.Store(multicastAddress)
 
 	// Start streaming in a goroutine
 	s.running = true
