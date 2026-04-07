@@ -513,7 +513,7 @@ func (s *Streamer) Start(station config.Station, multicastAddress string) error 
 	if splitErr == nil {
 		port, portErr := strconv.Atoi(portStr)
 		if portErr == nil {
-			sdp := aes67.BuildSDP("gostreamer", multicastIP, port, 97, aes67.DefaultPTPRefClock, aes67.DefaultPtimeMs)
+			sdp := aes67.BuildSDP("gostreamer", multicastIP, "", port, 97, aes67.DefaultPTPRefClock, aes67.DefaultPtimeMs)
 			announcer, announceErr := aes67.NewSAPAnnouncer(aes67.DefaultSAPAddress, 30*time.Second, sdp)
 			if announceErr != nil {
 				log.Printf("Failed to start SAP announcer: %v", announceErr)

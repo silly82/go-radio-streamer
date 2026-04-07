@@ -84,7 +84,9 @@ func (r *Router) handleSDP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	sdp := aes67.BuildSDP(sessionName, multicastIP, port, payloadType, ptpRefClock, ptimeMs)
+	originIP := req.URL.Query().Get("originip")
+
+	sdp := aes67.BuildSDP(sessionName, multicastIP, originIP, port, payloadType, ptpRefClock, ptimeMs)
 
 	w.Header().Set("Content-Type", "application/sdp")
 	w.WriteHeader(http.StatusOK)

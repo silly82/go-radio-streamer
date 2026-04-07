@@ -184,6 +184,7 @@ Query-Parameter:
 - `pt` (Default `97`)
 - `ptime` (Default `40`)
 - `ptp` (Default `IEEE1588-2008:00-00-00-00-00-00-00-00:0`)
+- `originip` (Default: auto-detected local IP address)
 
 ## 📡 MQTT
 
