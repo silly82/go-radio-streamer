@@ -14,9 +14,13 @@ type Station struct {
 }
 
 type MQTTConfig struct {
-	Broker  string
-	User    string
+	Broker   string
+	User     string
 	Password string
+}
+
+type StreamerConfig struct {
+	MulticastAddress string
 }
 
 func LoadStations(path string) ([]Station, error) {
@@ -96,4 +100,44 @@ func LoadMQTTConfig(path string) (*MQTTConfig, error) {
 	}
 
 	return config, nil
+}
+
+const DefaultMulticastAddress = "239.69.250.171:5004"
+
+func LoadStreamerConfig(path string) (*StreamerConfig, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("could not open streamer config file: %w", err)
+	}
+	defer file.Close()
+
+	cfg := &StreamerConfig{
+		MulticastAddress: DefaultMulticastAddress,
+	}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "multicast_address":
+			cfg.MulticastAddress = value
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading streamer config file: %w", err)
+	}
+
+	return cfg, nil
 }
