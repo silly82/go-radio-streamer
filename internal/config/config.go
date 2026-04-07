@@ -21,6 +21,12 @@ type MQTTConfig struct {
 
 type StreamerConfig struct {
 	MulticastAddress string
+	// PTPRefClock is the IEEE 1588 PTP grandmaster clock ID in the form
+	// "IEEE1588-2008:AA-BB-CC-DD-EE-FF-00-00:0".  When set, it is advertised
+	// in the SDP as "a=ts-refclk:ptp=<PTPRefClock>".  Leave empty to use the
+	// local MAC address ("localmac") as the reference clock, which is the
+	// correct setting when no external PTP clock is present on the network.
+	PTPRefClock string
 }
 
 func LoadStations(path string) ([]Station, error) {
@@ -132,6 +138,8 @@ func LoadStreamerConfig(path string) (*StreamerConfig, error) {
 		switch key {
 		case "multicast_address":
 			cfg.MulticastAddress = value
+		case "ptp_ref_clock":
+			cfg.PTPRefClock = value
 		}
 	}
 

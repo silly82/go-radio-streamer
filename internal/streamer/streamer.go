@@ -56,6 +56,7 @@ type Streamer struct {
 	heartbeatStop  chan struct{}
 	metadata       Metadata
 	sapAnnouncer   *aes67.SAPAnnouncer
+	refClock       string // full a=ts-refclk value, e.g. "localmac=…" or "ptp=…"
 }
 
 // NewStreamer creates a new Streamer.
@@ -64,7 +65,26 @@ func NewStreamer(publishFunc func(topic string, message string)) (*Streamer, err
 		stopCh:      make(chan struct{}),
 		streamDone:  make(chan struct{}),
 		publishFunc: publishFunc,
+		refClock:    aes67.LocalRefClock(),
 	}, nil
+}
+
+// RefClock returns the current reference clock value used in SDP announcements.
+func (s *Streamer) RefClock() string {
+	return s.refClock
+}
+
+// SetRefClock configures the reference clock advertised in the SDP.
+// ptpClockID should be the raw PTP clock identifier (e.g.
+// "IEEE1588-2008:AA-BB-CC-DD-EE-FF-00-00:0").  When empty, the local MAC
+// address is used as the reference clock, which is the correct default when no
+// external PTP grandmaster clock is present on the network.
+func (s *Streamer) SetRefClock(ptpClockID string) {
+	if ptpClockID != "" {
+		s.refClock = "ptp=" + ptpClockID
+	} else {
+		s.refClock = aes67.LocalRefClock()
+	}
 }
 
 // SetPublishFunc sets the publish function for MQTT.
@@ -330,18 +350,27 @@ func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
 	}()
 
 	seq := uint16(0)
-	timestamp := uint32(0)
-	ssrc := rand.Uint32()
 
 	const (
 		rtpPayloadType = 97
+		rtpClockRate   = 48000 // Hz – matches L24/48000/2 codec in SDP
 		channels       = 2
-		samplesPerMs   = 48
+		samplesPerMs   = rtpClockRate / 1000
 		bytesPerL24    = 3
 		ptimeMs        = 40
 		bufferPackets  = 256
 		prebufferPkts  = 25
 	)
+
+	// Initialise the RTP timestamp from the current wall-clock time scaled to
+	// the 48 kHz RTP clock rate.  With "a=mediaclk:direct=0" in the SDP,
+	// receivers expect the timestamp to reflect the real-time position of the
+	// stream, not an arbitrary counter starting at 0.  Using the wall-clock
+	// ensures proper synchronisation both with apps and with AES67 hardware
+	// receivers – especially when an external PTP grandmaster clock is present.
+	now := time.Now()
+	timestamp := uint32(now.Unix()*rtpClockRate + int64(now.Nanosecond())*rtpClockRate/1_000_000_000)
+	ssrc := rand.Uint32()
 
 	samplesPerPacket := samplesPerMs * ptimeMs
 	packetDuration := time.Duration(ptimeMs) * time.Millisecond
@@ -513,7 +542,7 @@ func (s *Streamer) Start(station config.Station, multicastAddress string) error 
 	if splitErr == nil {
 		port, portErr := strconv.Atoi(portStr)
 		if portErr == nil {
-			sdp := aes67.BuildSDP("gostreamer", multicastIP, "", port, 97, aes67.DefaultPTPRefClock, aes67.DefaultPtimeMs)
+			sdp := aes67.BuildSDP("gostreamer", multicastIP, "", port, 97, s.refClock, aes67.DefaultPtimeMs)
 			announcer, announceErr := aes67.NewSAPAnnouncer(aes67.DefaultSAPAddress, 30*time.Second, sdp)
 			if announceErr != nil {
 				log.Printf("Failed to start SAP announcer: %v", announceErr)

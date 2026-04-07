@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"go-radio-streamer/internal/config"
 	"go-radio-streamer/internal/streamer"
@@ -18,14 +19,16 @@ type Router struct {
 	streamer         *streamer.Streamer
 	stations         []config.Station
 	multicastAddress string
+	refClock         string // full ts-refclk value used in SDP responses
 }
 
-func NewRouter(s *streamer.Streamer, stations []config.Station, multicastAddress string) *Router {
+func NewRouter(s *streamer.Streamer, stations []config.Station, multicastAddress string, refClock string) *Router {
 	r := &Router{
 		Router:           mux.NewRouter(),
 		streamer:         s,
 		stations:         stations,
 		multicastAddress: multicastAddress,
+		refClock:         refClock,
 	}
 	r.setupRoutes()
 	return r
@@ -87,9 +90,21 @@ func (r *Router) handleSDP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	ptpRefClock := req.URL.Query().Get("ptp")
-	if ptpRefClock == "" {
-		ptpRefClock = aes67.DefaultPTPRefClock
+	// The ?ptp= query parameter accepts either:
+	//   - A raw PTP clock ID: "IEEE1588-2008:AA-BB-CC-DD-EE-FF-00-00:0"
+	//     (the "ptp=" prefix is added automatically for backward compatibility)
+	//   - A full ts-refclk value: "ptp=IEEE1588-2008:…" or "localmac=…"
+	// When not provided, the configured reference clock is used as the default.
+	tsRefClk := req.URL.Query().Get("ptp")
+	if tsRefClk == "" {
+		if r.refClock != "" {
+			tsRefClk = r.refClock
+		} else {
+			tsRefClk = aes67.LocalRefClock()
+		}
+	} else if !strings.HasPrefix(tsRefClk, "ptp=") && !strings.HasPrefix(tsRefClk, "localmac=") {
+		// Backward compat: caller passed the raw PTP clock ID without prefix.
+		tsRefClk = "ptp=" + tsRefClk
 	}
 
 	ptimeMs := aes67.DefaultPtimeMs
@@ -101,7 +116,7 @@ func (r *Router) handleSDP(w http.ResponseWriter, req *http.Request) {
 
 	originIP := req.URL.Query().Get("originip")
 
-	sdp := aes67.BuildSDP(sessionName, multicastIP, originIP, port, payloadType, ptpRefClock, ptimeMs)
+	sdp := aes67.BuildSDP(sessionName, multicastIP, originIP, port, payloadType, tsRefClk, ptimeMs)
 
 	w.Header().Set("Content-Type", "application/sdp")
 	w.WriteHeader(http.StatusOK)
