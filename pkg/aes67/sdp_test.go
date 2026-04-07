@@ -51,6 +51,7 @@ func TestBuildSDP_Defaults(t *testing.T) {
 		"s=gostreamer",
 		"c=IN IP4 239.0.0.1/32",
 		"m=audio 5004 RTP/AVP 97",
+		"a=sendonly",
 		"a=rtpmap:97 L24/48000/2",
 		"a=ptime:40",
 	}
@@ -95,5 +96,20 @@ func TestGetLocalMAC(t *testing.T) {
 	parts := strings.Split(mac, "-")
 	if len(parts) != 6 {
 		t.Errorf("GetLocalMAC returned unexpected format: %q", mac)
+	}
+}
+
+func TestBuildSDP_Sendonly(t *testing.T) {
+	// AES67 sender sessions must carry the a=sendonly direction attribute so
+	// that hardware receivers can identify the stream as a sender-only session.
+	sdp := BuildSDP("test", "239.1.2.3", "10.0.0.1", 5004, 97, DefaultPTPRefClock, 40)
+	if !strings.Contains(sdp, "a=sendonly\r\n") {
+		t.Errorf("SDP missing required a=sendonly attribute, got:\n%s", sdp)
+	}
+	// a=sendonly must appear in the media section (after the m= line)
+	mIdx := strings.Index(sdp, "\r\nm=audio ")
+	soIdx := strings.Index(sdp, "\r\na=sendonly")
+	if soIdx < mIdx {
+		t.Errorf("a=sendonly must appear in the media section (after m= line)")
 	}
 }

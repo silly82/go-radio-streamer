@@ -110,6 +110,7 @@ func BuildSDP(sessionName, multicastIP, originIP string, port, payloadType int, 
 		"c=IN IP4 %s/32\r\n"+
 		"t=0 0\r\n"+
 		"m=audio %d RTP/AVP %d\r\n"+
+		"a=sendonly\r\n"+
 		"a=rtpmap:%d L24/48000/2\r\n"+
 		"a=ptime:%d\r\n"+
 		"a=ts-refclk:%s\r\n"+

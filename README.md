@@ -257,6 +257,16 @@ curl -sS http://localhost:8080/api/stream.sdp
 
 3. Receiver muss `L24/48000/2`, PT `97` erwarten.
 
+### Hardware-Receiver (z. B. Nota 142)
+
+Hardware-AES67-Receiver werten die SDP-Attribute strikt aus. Das SDP enthält `a=sendonly`, welches als Pflichtattribut für Sende-Sessions gemäß AES67-Standard gilt. Ohne dieses Attribut ignorieren viele Hardware-Receiver den Stream.
+
+Prüfen Sie folgende Punkte:
+- SDP enthält `a=sendonly` (ab dieser Version automatisch vorhanden)
+- Multicast-Adresse und Port stimmen mit der Konfiguration überein: `239.69.250.171:5004`
+- Receiver ist im gleichen Multicast-Netzwerksegment (IGMP Snooping aktiv?)
+- Bei PTP-synchronisierten Receivern: `ptp_ref_clock` in `streamer.conf` setzen
+
 ### Audio knackt/stottert
 - Defaults sind stabilitätsorientiert (`ptime=40`, Prebuffer, Silence bei Underrun)
 - Receiver-Jitterbuffer erhöhen
