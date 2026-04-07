@@ -358,7 +358,7 @@ func (s *Streamer) streamAudio(conn *net.UDPConn, streamURL string) {
 		samplesPerMs   = rtpClockRate / 1000
 		bytesPerL24    = 3
 		ptimeMs        = 40
-		bufferPackets  = 256
+		bufferPackets  = 75 // 75 × 40 ms = 3 s
 		prebufferPkts  = 25
 	)
 
