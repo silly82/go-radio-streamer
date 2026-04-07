@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"strconv"
 
@@ -14,15 +15,17 @@ import (
 
 type Router struct {
 	*mux.Router
-	streamer *streamer.Streamer
-	stations []config.Station
+	streamer         *streamer.Streamer
+	stations         []config.Station
+	multicastAddress string
 }
 
-func NewRouter(s *streamer.Streamer, stations []config.Station) *Router {
+func NewRouter(s *streamer.Streamer, stations []config.Station, multicastAddress string) *Router {
 	r := &Router{
-		Router:   mux.NewRouter(),
-		streamer: s,
-		stations: stations,
+		Router:           mux.NewRouter(),
+		streamer:         s,
+		stations:         stations,
+		multicastAddress: multicastAddress,
 	}
 	r.setupRoutes()
 	return r
@@ -55,13 +58,25 @@ func (r *Router) handleSDP(w http.ResponseWriter, req *http.Request) {
 
 	multicastIP := req.URL.Query().Get("ip")
 	if multicastIP == "" {
-		multicastIP = "239.0.0.1"
+		host, _, err := net.SplitHostPort(r.multicastAddress)
+		if err == nil {
+			multicastIP = host
+		} else {
+			multicastIP = "239.69.250.171"
+		}
 	}
 
 	port := 5004
 	if v := req.URL.Query().Get("port"); v != "" {
 		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
 			port = parsed
+		}
+	} else {
+		_, portStr, err := net.SplitHostPort(r.multicastAddress)
+		if err == nil {
+			if parsed, err := strconv.Atoi(portStr); err == nil && parsed > 0 {
+				port = parsed
+			}
 		}
 	}
 
@@ -106,7 +121,7 @@ func (r *Router) handlePlay(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	station := r.stations[payload.Station-1]
-	if err := r.streamer.Start(station, "239.0.0.1:5004"); err != nil {
+	if err := r.streamer.Start(station, r.multicastAddress); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

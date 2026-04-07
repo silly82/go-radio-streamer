@@ -11,15 +11,17 @@ import (
 )
 
 type Handler struct {
-	streamer *streamer.Streamer
-	stations []config.Station
-	client   MQTT.Client
+	streamer         *streamer.Streamer
+	stations         []config.Station
+	client           MQTT.Client
+	multicastAddress string
 }
 
-func NewHandler(s *streamer.Streamer, stations []config.Station) *Handler {
+func NewHandler(s *streamer.Streamer, stations []config.Station, multicastAddress string) *Handler {
 	return &Handler{
-		streamer: s,
-		stations: stations,
+		streamer:         s,
+		stations:         stations,
+		multicastAddress: multicastAddress,
 	}
 }
 
@@ -72,7 +74,7 @@ func (h *Handler) messageHandler(client MQTT.Client, msg MQTT.Message) {
 			return
 		}
 		station := h.stations[num-1]
-		err = h.streamer.Start(station, "239.0.0.1:5004")
+		err = h.streamer.Start(station, h.multicastAddress)
 		if err != nil {
 			log.Printf("Failed to start streaming: %v", err)
 		} else {

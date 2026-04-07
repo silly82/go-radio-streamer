@@ -29,6 +29,16 @@ func main() {
 		mqttConfig = nil
 	}
 
+	streamerConfig, err := config.LoadStreamerConfig("streamer.conf")
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("Warning: streamer.conf not found, using default multicast address %s", config.DefaultMulticastAddress)
+		} else {
+			log.Printf("Warning: failed to load streamer config, using defaults: %v", err)
+		}
+		streamerConfig = &config.StreamerConfig{MulticastAddress: config.DefaultMulticastAddress}
+	}
+
 	// Create streamer with nil publish func initially
 	s, err := streamer.NewStreamer(nil)
 	if err != nil {
@@ -43,7 +53,7 @@ func main() {
 		}
 
 		// Setup MQTT handler (legacy, kept for API compatibility)
-		mqttHandler := mqtt.NewHandler(s, stations)
+		mqttHandler := mqtt.NewHandler(s, stations, streamerConfig.MulticastAddress)
 		mqttHandler.SetupMQTT(mqttConfig.Broker, mqttConfig.User, mqttConfig.Password)
 
 		// Set publish func
@@ -51,7 +61,7 @@ func main() {
 	}
 
 	// Setup router
-	router := api.NewRouter(s, stations)
+	router := api.NewRouter(s, stations, streamerConfig.MulticastAddress)
 	web.SetupRoutes(router.Router)
 
 	fmt.Println("Server starting on :8080")

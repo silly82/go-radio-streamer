@@ -108,9 +108,18 @@ user=your_user
 pass=your_password
 ```
 
+### `streamer.conf` (optional)
+
+```text
+# Multicast address for RTP streaming and SAP announcements
+multicast_address=239.69.250.171:5004
+```
+
+If `streamer.conf` is absent the default is `239.69.250.171:5004`.
+
 ## ✨ Features
 
-- RTP Multicast auf `239.0.0.1:5004`
+- RTP Multicast auf `239.69.250.171:5004` (konfigurierbar in `streamer.conf`)
 - Audioformat: `L24/48000/2` (Payload Type `97`)
 - Stabiler Senderwechsel über `POST /api/play` (kontrollierter Stop/Start)
 - Stabilitätsorientiertes Tuning (`ptime=40`, Prebuffer, Silence bei Underrun)
@@ -298,6 +307,7 @@ go-radio-streamer/
 │   └── stream.go
 ├── stations.txt
 ├── mqtt.conf
+├── streamer.conf
 ├── go.mod
 └── README.md
 ```
