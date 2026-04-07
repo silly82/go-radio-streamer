@@ -53,6 +53,7 @@ func TestBuildSDP_Defaults(t *testing.T) {
 		"m=audio 5004 RTP/AVP 97",
 		"a=rtpmap:97 L24/48000/2",
 		"a=ptime:40",
+		"a=sendonly",
 	}
 	for _, e := range expected {
 		if !strings.Contains(sdp, e) {
@@ -97,3 +98,4 @@ func TestGetLocalMAC(t *testing.T) {
 		t.Errorf("GetLocalMAC returned unexpected format: %q", mac)
 	}
 }
+
